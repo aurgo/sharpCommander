@@ -1,0 +1,23 @@
+C:\Documents and Settings\Armando\Configuración local\Datos de programa\Temporary Projects\sharpCommander\bin\Debug\sharpCommander.exe
+C:\Documents and Settings\Armando\Configuración local\Datos de programa\Temporary Projects\sharpCommander\bin\Debug\sharpCommander.pdb
+C:\Documents and Settings\Armando\Configuración local\Datos de programa\Temporary Projects\sharpCommander\obj\Debug\ResolveAssemblyReference.cache
+C:\Documents and Settings\Armando\Configuración local\Datos de programa\Temporary Projects\sharpCommander\obj\Debug\sharpCommander.Main.resources
+C:\Documents and Settings\Armando\Configuración local\Datos de programa\Temporary Projects\sharpCommander\obj\Debug\sharpCommander.Properties.Resources.resources
+C:\Documents and Settings\Armando\Configuración local\Datos de programa\Temporary Projects\sharpCommander\obj\Debug\sharpCommander.csproj.GenerateResource.Cache
+C:\Documents and Settings\Armando\Configuración local\Datos de programa\Temporary Projects\sharpCommander\obj\Debug\sharpCommander.exe
+C:\Documents and Settings\Armando\Configuración local\Datos de programa\Temporary Projects\sharpCommander\obj\Debug\sharpCommander.pdb
+C:\Mis Proyectos\sharpCommander\sharpCommander\obj\Debug\sharpCommander.exe
+C:\Mis Proyectos\sharpCommander\sharpCommander\obj\Debug\sharpCommander.pdb
+C:\Mis Proyectos\sharpCommander\sharpCommander\bin\Debug\sharpCommander.exe
+C:\Mis Proyectos\sharpCommander\sharpCommander\bin\Debug\sharpCommander.pdb
+C:\Mis Proyectos\sharpCommander\sharpCommander\obj\Debug\ResolveAssemblyReference.cache
+C:\Mis Proyectos\sharpCommander\sharpCommander\obj\Debug\sharpCommander.IUFileTabs.resources
+C:\Mis Proyectos\sharpCommander\sharpCommander\obj\Debug\sharpCommander.Main.resources
+C:\Mis Proyectos\sharpCommander\sharpCommander\obj\Debug\sharpCommander.Properties.Resources.resources
+C:\Mis Proyectos\sharpCommander\sharpCommander\obj\Debug\sharpCommander.csproj.GenerateResource.Cache
+C:\Mis Proyectos\sharpCommander\sharpCommander\obj\Debug\sharpCommander.AboutBox.resources
+C:\Mis Proyectos\sharpCommander\sharpCommander\bin\Debug\sharpCommander.exe.manifest
+C:\Mis Proyectos\sharpCommander\sharpCommander\bin\Debug\sharpCommander.application
+C:\Mis Proyectos\sharpCommander\sharpCommander\obj\Debug\sharpCommander.TrustInfo.xml
+C:\Mis Proyectos\sharpCommander\sharpCommander\obj\Debug\sharpCommander.exe.manifest
+C:\Mis Proyectos\sharpCommander\sharpCommander\obj\Debug\sharpCommander.application

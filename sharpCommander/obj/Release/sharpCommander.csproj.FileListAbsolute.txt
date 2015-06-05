@@ -1,0 +1,15 @@
+C:\Mis Proyectos\sharpCommander\sharpCommander\bin\Release\sharpCommander.exe
+C:\Mis Proyectos\sharpCommander\sharpCommander\bin\Release\sharpCommander.pdb
+C:\Mis Proyectos\sharpCommander\sharpCommander\obj\Release\ResolveAssemblyReference.cache
+C:\Mis Proyectos\sharpCommander\sharpCommander\obj\Release\sharpCommander.IUFileTabs.resources
+C:\Mis Proyectos\sharpCommander\sharpCommander\obj\Release\sharpCommander.Main.resources
+C:\Mis Proyectos\sharpCommander\sharpCommander\obj\Release\sharpCommander.Properties.Resources.resources
+C:\Mis Proyectos\sharpCommander\sharpCommander\obj\Release\sharpCommander.csproj.GenerateResource.Cache
+C:\Mis Proyectos\sharpCommander\sharpCommander\obj\Release\sharpCommander.exe
+C:\Mis Proyectos\sharpCommander\sharpCommander\obj\Release\sharpCommander.pdb
+C:\Mis Proyectos\sharpCommander\sharpCommander\obj\Release\sharpCommander.AboutBox.resources
+C:\Mis Proyectos\sharpCommander\sharpCommander\bin\Release\sharpCommander.exe.manifest
+C:\Mis Proyectos\sharpCommander\sharpCommander\bin\Release\sharpCommander.application
+C:\Mis Proyectos\sharpCommander\sharpCommander\obj\Release\sharpCommander.TrustInfo.xml
+C:\Mis Proyectos\sharpCommander\sharpCommander\obj\Release\sharpCommander.exe.manifest
+C:\Mis Proyectos\sharpCommander\sharpCommander\obj\Release\sharpCommander.application
