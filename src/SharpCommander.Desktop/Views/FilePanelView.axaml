@@ -1,0 +1,94 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:SharpCommander.Desktop.ViewModels"
+             xmlns:models="using:SharpCommander.Core.Models"
+             xmlns:local="using:SharpCommander.Desktop.Views"
+             mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="600"
+             x:Class="SharpCommander.Desktop.Views.FilePanelView"
+             x:DataType="vm:FilePanelViewModel"
+             Focusable="True">
+
+    <Border Classes="file-panel">
+        <DockPanel>
+            <!-- Panel Header -->
+            <Border DockPanel.Dock="Top" Classes="panel-header">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <Button Grid.Column="0" 
+                            Command="{Binding NavigateUpCommand}"
+                            IsEnabled="{Binding !IsRootView}"
+                            Padding="8,4"
+                            Margin="0,0,8,0"
+                            ToolTip.Tip="Go up (Backspace)">
+                        <PathIcon Data="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2Z" 
+                                  Width="16" Height="16" />
+                    </Button>
+                    
+                    <TextBox Grid.Column="1" 
+                             Classes="path-input"
+                             Text="{Binding DisplayPath}"
+                             IsReadOnly="True" />
+                    
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" Margin="8,0,0,0">
+                        <Button Command="{Binding NavigateToRootCommand}"
+                                Padding="8,4"
+                                ToolTip.Tip="Computer">
+                            <PathIcon Data="M4 6h16v10H4V6m16-2H4c-1.11 0-2 .89-2 2v10c0 1.11.89 2 2 2h6v2H8v2h8v-2h-2v-2h6c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2Z" 
+                                      Width="16" Height="16" />
+                        </Button>
+                        <Button Command="{Binding RefreshCommand}"
+                                Padding="8,4"
+                                ToolTip.Tip="Refresh (Ctrl+R)">
+                            <PathIcon Data="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 0 0-8 8 8 8 0 0 0 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18a6 6 0 0 1-6-6 6 6 0 0 1 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35Z" 
+                                      Width="16" Height="16" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Status Bar -->
+            <Border DockPanel.Dock="Bottom" Classes="status-bar">
+                <TextBlock Classes="status-text" Text="{Binding StatusText}" />
+            </Border>
+
+            <!-- Loading Indicator -->
+            <ProgressBar DockPanel.Dock="Top"
+                         IsIndeterminate="True"
+                         IsVisible="{Binding IsLoading}"
+                         Height="2" />
+
+            <!-- File List -->
+            <ListBox ItemsSource="{Binding Entries}"
+                     SelectedItem="{Binding SelectedEntry}"
+                     SelectionMode="Multiple"
+                     DoubleTapped="ListBox_DoubleTapped"
+                     KeyDown="ListBox_KeyDown">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="models:FileSystemEntry">
+                        <Grid ColumnDefinitions="Auto,*,100,100" Margin="4,2">
+                            <PathIcon Grid.Column="0"
+                                      Width="16" Height="16" Margin="0,0,8,0"
+                                      Data="{Binding EntryType, Converter={x:Static local:FileIconConverter.Instance}}"
+                                      Foreground="{Binding EntryType, Converter={x:Static local:FileColorConverter.Instance}}" />
+                            <TextBlock Grid.Column="1" 
+                                       Text="{Binding Name}" 
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="2" 
+                                       Text="{Binding Size, Converter={x:Static local:FileSizeConverter.Instance}}"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Right"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                            <TextBlock Grid.Column="3" 
+                                       Text="{Binding LastModified, StringFormat='{}{0:d}'}"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Right"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </DockPanel>
+    </Border>
+</UserControl>

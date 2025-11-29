@@ -1,0 +1,106 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:SharpCommander.Desktop.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="450"
+        x:Class="SharpCommander.Desktop.Views.AboutWindow"
+        x:DataType="vm:AboutViewModel"
+        Title="About SharpCommander"
+        Width="500" Height="450"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.title">
+            <Setter Property="FontSize" Value="28" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource SystemAccentColor}" />
+        </Style>
+        <Style Selector="TextBlock.version">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+            <Setter Property="Margin" Value="0,4,0,0" />
+        </Style>
+        <Style Selector="TextBlock.description">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="LineHeight" Value="20" />
+            <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseMediumHighBrush}" />
+        </Style>
+        <Style Selector="TextBlock.feature">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Margin" Value="0,4" />
+        </Style>
+    </Window.Styles>
+
+    <Border Padding="24">
+        <DockPanel>
+            <!-- Close Button -->
+            <Button DockPanel.Dock="Bottom"
+                    Content="Close"
+                    HorizontalAlignment="Right"
+                    Padding="24,8"
+                    Click="Close_Click" />
+
+            <ScrollViewer>
+                <StackPanel Spacing="16">
+                    <!-- Header -->
+                    <StackPanel HorizontalAlignment="Center" Spacing="8">
+                        <!-- Logo/Icon -->
+                        <Border Width="80" Height="80" 
+                                CornerRadius="16"
+                                Background="{DynamicResource SystemAccentColor}">
+                            <PathIcon Data="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2Z"
+                                      Width="40" Height="40"
+                                      Foreground="White" />
+                        </Border>
+                        
+                        <TextBlock Classes="title" 
+                                   Text="{Binding ProductName}"
+                                   HorizontalAlignment="Center" />
+                        
+                        <TextBlock Classes="version"
+                                   Text="{Binding Version, StringFormat='Version {0}'}"
+                                   HorizontalAlignment="Center" />
+                    </StackPanel>
+
+                    <Separator Margin="0,8" />
+
+                    <!-- Description -->
+                    <TextBlock Classes="description" Text="{Binding Description}" />
+
+                    <!-- Features -->
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Features:" FontWeight="SemiBold" Margin="0,8,0,4" />
+                        <ItemsControl ItemsSource="{Binding Features}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Classes="feature" Text="{Binding}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <Separator Margin="0,8" />
+
+                    <!-- Footer -->
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="{Binding Copyright}" 
+                                   FontSize="11"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                        <TextBlock Text="{Binding License}" 
+                                   FontSize="11"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                        <Button Content="{Binding Website}"
+                                Classes="hyperlink"
+                                Padding="0"
+                                Background="Transparent"
+                                Click="Website_Click" />
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</Window>
