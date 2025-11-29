@@ -4,6 +4,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:SharpCommander.Desktop.ViewModels"
         xmlns:views="using:SharpCommander.Desktop.Views"
+        xmlns:models="using:SharpCommander.Core.Models"
         mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="800"
         x:Class="SharpCommander.Desktop.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
@@ -13,16 +14,31 @@
         WindowStartupLocation="CenterScreen">
 
     <Window.KeyBindings>
+        <KeyBinding Gesture="F3" Command="{Binding ViewCommand}" />
+        <KeyBinding Gesture="F4" Command="{Binding EditCommand}" />
         <KeyBinding Gesture="F5" Command="{Binding CopyCommand}" />
         <KeyBinding Gesture="F6" Command="{Binding MoveCommand}" />
+        <KeyBinding Gesture="F7" Command="{Binding NewFolderCommand}" />
+        <KeyBinding Gesture="F8" Command="{Binding DeleteCommand}" />
         <KeyBinding Gesture="Delete" Command="{Binding DeleteCommand}" />
         <KeyBinding Gesture="Ctrl+R" Command="{Binding RefreshCommand}" />
+        <KeyBinding Gesture="Ctrl+B" Command="{Binding ToggleFavoritesPanelCommand}" />
     </Window.KeyBindings>
 
     <DockPanel>
         <!-- Menu Bar -->
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="_File">
+                <MenuItem Header="_View" InputGesture="F3" Command="{Binding ViewCommand}">
+                    <MenuItem.Icon>
+                        <PathIcon Data="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5M12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5m0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3Z" />
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="_Edit" InputGesture="F4" Command="{Binding EditCommand}">
+                    <MenuItem.Icon>
+                        <PathIcon Data="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75L3 17.25Z" />
+                    </MenuItem.Icon>
+                </MenuItem>
                 <MenuItem Header="_Copy" InputGesture="F5" Command="{Binding CopyCommand}">
                     <MenuItem.Icon>
                         <PathIcon Data="M19 21H8V7h11m0-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2m-3-4H4a2 2 0 0 0-2 2v14h2V3h12V1Z" />
@@ -33,7 +49,12 @@
                         <PathIcon Data="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6m4 18H6V4h7v5h5v11m-3-9v4h-4v-4H9l5-5 5 5h-3Z" />
                     </MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Header="_Delete" InputGesture="Delete" Command="{Binding DeleteCommand}">
+                <MenuItem Header="_New Folder" InputGesture="F7" Command="{Binding NewFolderCommand}">
+                    <MenuItem.Icon>
+                        <PathIcon Data="M10 4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6m2 6v3h3v2h-3v3h-2v-3H7v-2h3v-3h2Z" />
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="_Delete" InputGesture="F8" Command="{Binding DeleteCommand}">
                     <MenuItem.Icon>
                         <PathIcon Data="M19 4h-3.5l-1-1h-5l-1 1H5v2h14M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12Z" />
                     </MenuItem.Icon>
@@ -51,8 +72,25 @@
                         <PathIcon Data="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 0 0-8 8 8 8 0 0 0 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18a6 6 0 0 1-6-6 6 6 0 0 1 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35Z" />
                     </MenuItem.Icon>
                 </MenuItem>
+                <Separator />
+                <MenuItem Header="_Sync Panels" Command="{Binding SyncPanelsCommand}">
+                    <MenuItem.Icon>
+                        <PathIcon Data="M18 12l4-4-4-4v3H3v2h15v3M6 12l-4 4 4 4v-3h15v-2H6v-3Z" />
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="S_wap Panels" Command="{Binding SwapPanelsCommand}">
+                    <MenuItem.Icon>
+                        <PathIcon Data="M21 9l-4-4v3H3v2h14v3l4-4M3 15l4 4v-3h14v-2H7v-3l-4 4Z" />
+                    </MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
             <MenuItem Header="_View">
+                <MenuItem Header="_Favorites Panel" InputGesture="Ctrl+B" Command="{Binding ToggleFavoritesPanelCommand}">
+                    <MenuItem.Icon>
+                        <PathIcon Data="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27Z" />
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator />
                 <MenuItem Header="_Theme">
                     <MenuItem Header="_Light" Click="ThemeLight_Click" />
                     <MenuItem Header="_Dark" Click="ThemeDark_Click" />
@@ -71,6 +109,18 @@
         <!-- Toolbar -->
         <Border DockPanel.Dock="Top" Classes="toolbar">
             <StackPanel Orientation="Horizontal" Spacing="4">
+                <Button Classes="toolbar-button" Command="{Binding ViewCommand}" ToolTip.Tip="View (F3)">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <PathIcon Data="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5M12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5m0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3Z" Width="16" Height="16" />
+                        <TextBlock Text="View" />
+                    </StackPanel>
+                </Button>
+                <Button Classes="toolbar-button" Command="{Binding EditCommand}" ToolTip.Tip="Edit (F4)">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <PathIcon Data="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75L3 17.25Z" Width="16" Height="16" />
+                        <TextBlock Text="Edit" />
+                    </StackPanel>
+                </Button>
                 <Button Classes="toolbar-button" Command="{Binding CopyCommand}" ToolTip.Tip="Copy (F5)">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <PathIcon Data="M19 21H8V7h11m0-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2m-3-4H4a2 2 0 0 0-2 2v14h2V3h12V1Z" Width="16" Height="16" />
@@ -83,7 +133,13 @@
                         <TextBlock Text="Move" />
                     </StackPanel>
                 </Button>
-                <Button Classes="toolbar-button" Command="{Binding DeleteCommand}" ToolTip.Tip="Delete (Del)">
+                <Button Classes="toolbar-button" Command="{Binding NewFolderCommand}" ToolTip.Tip="New Folder (F7)">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <PathIcon Data="M10 4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6m2 6v3h3v2h-3v3h-2v-3H7v-2h3v-3h2Z" Width="16" Height="16" />
+                        <TextBlock Text="New Folder" />
+                    </StackPanel>
+                </Button>
+                <Button Classes="toolbar-button" Command="{Binding DeleteCommand}" ToolTip.Tip="Delete (F8)">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <PathIcon Data="M19 4h-3.5l-1-1h-5l-1 1H5v2h14M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12Z" Width="16" Height="16" />
                         <TextBlock Text="Delete" />
@@ -96,7 +152,44 @@
                         <TextBlock Text="Refresh" />
                     </StackPanel>
                 </Button>
+                <Separator Width="1" Margin="8,0" />
+                <Button Classes="toolbar-button" Command="{Binding ToggleFavoritesPanelCommand}" ToolTip.Tip="Toggle Favorites (Ctrl+B)">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <PathIcon Data="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27Z" Width="16" Height="16" Foreground="Gold" />
+                        <TextBlock Text="Favorites" />
+                    </StackPanel>
+                </Button>
             </StackPanel>
+        </Border>
+
+        <!-- Function Keys Bar (Bottom) -->
+        <Border DockPanel.Dock="Bottom" Classes="function-bar" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
+            <Grid ColumnDefinitions="*,*,*,*,*,*,*,*">
+                <Button Grid.Column="0" Classes="function-button" Command="{Binding ViewCommand}">
+                    <TextBlock><Run FontWeight="Bold">F3</Run> View</TextBlock>
+                </Button>
+                <Button Grid.Column="1" Classes="function-button" Command="{Binding EditCommand}">
+                    <TextBlock><Run FontWeight="Bold">F4</Run> Edit</TextBlock>
+                </Button>
+                <Button Grid.Column="2" Classes="function-button" Command="{Binding CopyCommand}">
+                    <TextBlock><Run FontWeight="Bold">F5</Run> Copy</TextBlock>
+                </Button>
+                <Button Grid.Column="3" Classes="function-button" Command="{Binding MoveCommand}">
+                    <TextBlock><Run FontWeight="Bold">F6</Run> Move</TextBlock>
+                </Button>
+                <Button Grid.Column="4" Classes="function-button" Command="{Binding NewFolderCommand}">
+                    <TextBlock><Run FontWeight="Bold">F7</Run> NewDir</TextBlock>
+                </Button>
+                <Button Grid.Column="5" Classes="function-button" Command="{Binding DeleteCommand}">
+                    <TextBlock><Run FontWeight="Bold">F8</Run> Delete</TextBlock>
+                </Button>
+                <Button Grid.Column="6" Classes="function-button" Command="{Binding SwapPanelsCommand}">
+                    <TextBlock><Run FontWeight="Bold">F9</Run> Swap</TextBlock>
+                </Button>
+                <Button Grid.Column="7" Classes="function-button" Click="Exit_Click">
+                    <TextBlock><Run FontWeight="Bold">F10</Run> Exit</TextBlock>
+                </Button>
+            </Grid>
         </Border>
 
         <!-- Status Bar -->
@@ -116,20 +209,60 @@
             </Grid>
         </Border>
 
-        <!-- Main Content - Dual Pane -->
-        <Grid ColumnDefinitions="*,4,*">
-            <views:FilePanelView Grid.Column="0" 
-                                 DataContext="{Binding LeftPanel}"
-                                 GotFocus="LeftPanel_GotFocus" />
+        <!-- Main Content -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
             
-            <GridSplitter Grid.Column="1" 
-                          Width="4" 
-                          Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                          ResizeBehavior="PreviousAndNext" />
-            
-            <views:FilePanelView Grid.Column="2" 
-                                 DataContext="{Binding RightPanel}"
-                                 GotFocus="RightPanel_GotFocus" />
+            <!-- Favorites Panel (Left Side) -->
+            <Border Grid.Column="0" 
+                    IsVisible="{Binding ShowFavoritesPanel}"
+                    Width="180"
+                    Classes="favorites-panel"
+                    Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderThickness="0,0,1,0"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" 
+                               Text="⭐ Favorites" 
+                               FontWeight="SemiBold" 
+                               Margin="8"
+                               Foreground="{DynamicResource SystemAccentColor}" />
+                    <ListBox ItemsSource="{Binding LeftPanel.Favorites}"
+                             Background="Transparent"
+                             SelectionChanged="Favorites_SelectionChanged">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:FavoriteItem">
+                                <StackPanel Orientation="Horizontal" Spacing="8" Margin="4,2">
+                                    <PathIcon Width="16" Height="16"
+                                              Data="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2Z"
+                                              Foreground="{DynamicResource SystemAccentColor}" />
+                                    <TextBlock Text="{Binding Name}" 
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <!-- Dual Pane File Browser -->
+            <Grid Grid.Column="1" ColumnDefinitions="*,4,*">
+                <views:FilePanelView Grid.Column="0" 
+                                     DataContext="{Binding LeftPanel}"
+                                     GotFocus="LeftPanel_GotFocus" />
+                
+                <GridSplitter Grid.Column="1" 
+                              Width="4" 
+                              Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                              ResizeBehavior="PreviousAndNext" />
+                
+                <views:FilePanelView Grid.Column="2" 
+                                     DataContext="{Binding RightPanel}"
+                                     GotFocus="RightPanel_GotFocus" />
+            </Grid>
         </Grid>
     </DockPanel>
 </Window>

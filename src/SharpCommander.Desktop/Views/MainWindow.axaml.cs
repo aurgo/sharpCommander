@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Styling;
+using SharpCommander.Core.Models;
 using SharpCommander.Desktop.ViewModels;
 
 namespace SharpCommander.Desktop.Views;
@@ -17,6 +18,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         
         Loaded += OnLoaded;
+        Closing += OnClosing;
     }
 
     private async void OnLoaded(object? sender, RoutedEventArgs e)
@@ -24,6 +26,14 @@ public partial class MainWindow : Window
         if (DataContext is MainWindowViewModel viewModel)
         {
             await viewModel.InitializeAsync();
+        }
+    }
+
+    private async void OnClosing(object? sender, WindowClosingEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            await viewModel.SaveStateAsync();
         }
     }
 
@@ -40,6 +50,17 @@ public partial class MainWindow : Window
         if (DataContext is MainWindowViewModel viewModel)
         {
             viewModel.SetActivePanel(viewModel.RightPanel);
+        }
+    }
+
+    private void Favorites_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ListBox listBox && 
+            listBox.SelectedItem is FavoriteItem favorite &&
+            DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.ActivePanel?.NavigateToFavoriteCommand.Execute(favorite);
+            listBox.SelectedItem = null; // Reset selection
         }
     }
 

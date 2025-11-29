@@ -11,6 +11,7 @@ namespace SharpCommander.Desktop.ViewModels;
 public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 {
     private readonly IFileSystemService _fileSystemService;
+    private readonly ISettingsService _settingsService;
 
     [ObservableProperty]
     private FilePanelViewModel _leftPanel;
@@ -33,26 +34,62 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _currentOperation = string.Empty;
 
+    [ObservableProperty]
+    private bool _showFavoritesPanel = true;
+
+    [ObservableProperty]
+    private string _newItemName = string.Empty;
+
     public string Title => "SharpCommander - File Manager";
     
     public string Version => "2.0.0";
 
-    public MainWindowViewModel(IFileSystemService fileSystemService)
+    public MainWindowViewModel(IFileSystemService fileSystemService, ISettingsService settingsService)
     {
         _fileSystemService = fileSystemService;
-        _leftPanel = new FilePanelViewModel(fileSystemService);
-        _rightPanel = new FilePanelViewModel(fileSystemService);
+        _settingsService = settingsService;
+        _leftPanel = new FilePanelViewModel(fileSystemService, settingsService);
+        _rightPanel = new FilePanelViewModel(fileSystemService, settingsService);
         _activePanel = _leftPanel;
+        
+        // Subscribe to favorites changes to sync both panels
+        _leftPanel.FavoritesChanged += OnFavoritesChanged;
+        _rightPanel.FavoritesChanged += OnFavoritesChanged;
+    }
+
+    private void OnFavoritesChanged(object? sender, EventArgs e)
+    {
+        // When one panel changes favorites, update the other panel
+        if (sender == LeftPanel)
+        {
+            RightPanel.LoadFavorites();
+        }
+        else if (sender == RightPanel)
+        {
+            LeftPanel.LoadFavorites();
+        }
     }
 
     public async Task InitializeAsync()
     {
-        var homeDir = _fileSystemService.GetDefaultDirectory();
+        // Load settings from disk first (includes favorites and history)
+        await _settingsService.LoadAsync();
         
+        var leftPath = _settingsService.Settings.LastLeftPanelPath ?? _fileSystemService.GetDefaultDirectory();
+        var rightPath = _settingsService.Settings.LastRightPanelPath ?? _fileSystemService.GetDefaultDirectory();
+        
+        // Now initialize panels - this will load favorites and history from already-loaded settings
         await Task.WhenAll(
-            LeftPanel.InitializeAsync(homeDir),
-            RightPanel.InitializeAsync(homeDir)
+            LeftPanel.InitializeAsync(leftPath),
+            RightPanel.InitializeAsync(rightPath)
         );
+    }
+
+    public async Task SaveStateAsync()
+    {
+        _settingsService.Settings.LastLeftPanelPath = LeftPanel.CurrentPath;
+        _settingsService.Settings.LastRightPanelPath = RightPanel.CurrentPath;
+        await _settingsService.SaveAsync();
     }
 
     public void SetActivePanel(FilePanelViewModel panel)
@@ -169,6 +206,101 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
+    private void ToggleFavoritesPanel()
+    {
+        ShowFavoritesPanel = !ShowFavoritesPanel;
+    }
+
+    [RelayCommand]
+    private async Task NewFolderAsync()
+    {
+        if (ActivePanel is null || string.IsNullOrEmpty(ActivePanel.CurrentPath))
+        {
+            StatusMessage = "Cannot create folder in root view";
+            return;
+        }
+
+        // Default name - in a real app would show a dialog
+        var newFolderName = "New Folder";
+        var newFolderPath = Path.Combine(ActivePanel.CurrentPath, newFolderName);
+        
+        // Find unique name
+        var counter = 1;
+        while (Directory.Exists(newFolderPath))
+        {
+            newFolderName = $"New Folder ({counter++})";
+            newFolderPath = Path.Combine(ActivePanel.CurrentPath, newFolderName);
+        }
+
+        try
+        {
+            await _fileSystemService.CreateDirectoryAsync(newFolderPath);
+            await ActivePanel.RefreshAsync();
+            StatusMessage = $"Created folder: {newFolderName}";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Error creating folder: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private async Task RenameAsync()
+    {
+        if (ActivePanel?.SelectedEntry is null)
+        {
+            StatusMessage = "No item selected for rename";
+            return;
+        }
+
+        // In a real app would show a rename dialog
+        StatusMessage = "Rename: Press F2 or right-click for rename option";
+    }
+
+    [RelayCommand]
+    private async Task ViewAsync()
+    {
+        if (ActivePanel?.SelectedEntry?.EntryType == FileSystemEntryType.File)
+        {
+            await _fileSystemService.OpenWithDefaultAsync(ActivePanel.SelectedEntry.FullPath);
+        }
+    }
+
+    [RelayCommand]
+    private async Task EditAsync()
+    {
+        if (ActivePanel?.SelectedEntry?.EntryType == FileSystemEntryType.File)
+        {
+            // Open with default editor
+            await _fileSystemService.OpenWithDefaultAsync(ActivePanel.SelectedEntry.FullPath);
+        }
+    }
+
+    [RelayCommand]
+    private async Task SyncPanelsAsync()
+    {
+        if (ActivePanel is null)
+        {
+            return;
+        }
+
+        var targetPanel = ActivePanel == LeftPanel ? RightPanel : LeftPanel;
+        await targetPanel.NavigateToCommand.ExecuteAsync(ActivePanel.CurrentPath);
+    }
+
+    [RelayCommand]
+    private async Task SwapPanelsAsync()
+    {
+        var leftPath = LeftPanel.CurrentPath;
+        var rightPath = RightPanel.CurrentPath;
+
+        await Task.WhenAll(
+            LeftPanel.NavigateToCommand.ExecuteAsync(rightPath),
+            RightPanel.NavigateToCommand.ExecuteAsync(leftPath)
+        );
+    }
+
+    [RelayCommand]
     private void ShowAbout()
     {
         // This will be handled in the View layer
@@ -220,6 +352,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        LeftPanel.FavoritesChanged -= OnFavoritesChanged;
+        RightPanel.FavoritesChanged -= OnFavoritesChanged;
         LeftPanel.Dispose();
         RightPanel.Dispose();
     }

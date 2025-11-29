@@ -14,36 +14,113 @@
         <DockPanel>
             <!-- Panel Header -->
             <Border DockPanel.Dock="Top" Classes="panel-header">
-                <Grid ColumnDefinitions="Auto,*,Auto">
-                    <Button Grid.Column="0" 
-                            Command="{Binding NavigateUpCommand}"
-                            IsEnabled="{Binding !IsRootView}"
-                            Padding="8,4"
-                            Margin="0,0,8,0"
-                            ToolTip.Tip="Go up (Backspace)">
-                        <PathIcon Data="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2Z" 
-                                  Width="16" Height="16" />
-                    </Button>
-                    
-                    <TextBox Grid.Column="1" 
-                             Classes="path-input"
-                             Text="{Binding DisplayPath}"
-                             IsReadOnly="True" />
-                    
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" Margin="8,0,0,0">
+                <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto">
+                    <!-- Navigation buttons -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
+                        <Button Command="{Binding NavigateUpCommand}"
+                                IsEnabled="{Binding !IsRootView}"
+                                Padding="6,4"
+                                ToolTip.Tip="Go up (Backspace)">
+                            <PathIcon Data="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2Z" 
+                                      Width="14" Height="14" />
+                        </Button>
                         <Button Command="{Binding NavigateToRootCommand}"
-                                Padding="8,4"
+                                Padding="6,4"
                                 ToolTip.Tip="Computer">
                             <PathIcon Data="M4 6h16v10H4V6m16-2H4c-1.11 0-2 .89-2 2v10c0 1.11.89 2 2 2h6v2H8v2h8v-2h-2v-2h6c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2Z" 
-                                      Width="16" Height="16" />
-                        </Button>
-                        <Button Command="{Binding RefreshCommand}"
-                                Padding="8,4"
-                                ToolTip.Tip="Refresh (Ctrl+R)">
-                            <PathIcon Data="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 0 0-8 8 8 8 0 0 0 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18a6 6 0 0 1-6-6 6 6 0 0 1 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35Z" 
-                                      Width="16" Height="16" />
+                                      Width="14" Height="14" />
                         </Button>
                     </StackPanel>
+                    
+                    <!-- Path AutoCompleteBox with History -->
+                    <AutoCompleteBox Grid.Column="1" 
+                                     Classes="path-combo"
+                                     Text="{Binding EditablePath}"
+                                     ItemsSource="{Binding NavigationHistory}"
+                                     FilterMode="Contains"
+                                     Margin="4,0"
+                                     HorizontalAlignment="Stretch"
+                                     Watermark="Enter path...">
+                        <AutoCompleteBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:NavigationHistoryItem">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <PathIcon Data="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2Z" 
+                                              Width="14" Height="14"
+                                              Foreground="{DynamicResource SystemAccentColor}" />
+                                    <TextBlock Text="{Binding Path}" 
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </AutoCompleteBox.ItemTemplate>
+                        <AutoCompleteBox.KeyBindings>
+                            <KeyBinding Gesture="Enter" Command="{Binding NavigateToPathCommand}" />
+                        </AutoCompleteBox.KeyBindings>
+                    </AutoCompleteBox>
+                    
+                    <!-- Action buttons -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
+                        <Button Command="{Binding NavigateToPathCommand}"
+                                Padding="6,4"
+                                ToolTip.Tip="Go to path (Enter)">
+                            <PathIcon Data="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11H4Z" 
+                                      Width="14" Height="14" />
+                        </Button>
+                        <Button Command="{Binding ToggleFavoriteCommand}"
+                                IsEnabled="{Binding !IsRootView}"
+                                Padding="6,4"
+                                ToolTip.Tip="Add/Remove from favorites (Ctrl+D)">
+                            <PathIcon Width="14" Height="14">
+                                <PathIcon.Data>
+                                    <Binding Path="IsFavorite">
+                                        <Binding.Converter>
+                                            <local:FavoriteIconConverter />
+                                        </Binding.Converter>
+                                    </Binding>
+                                </PathIcon.Data>
+                                <PathIcon.Foreground>
+                                    <Binding Path="IsFavorite">
+                                        <Binding.Converter>
+                                            <local:FavoriteColorConverter />
+                                        </Binding.Converter>
+                                    </Binding>
+                                </PathIcon.Foreground>
+                            </PathIcon>
+                        </Button>
+                        <Button Command="{Binding ToggleSearchCommand}"
+                                Padding="6,4"
+                                ToolTip.Tip="Search/Filter (Ctrl+F)">
+                            <PathIcon Data="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z" 
+                                      Width="14" Height="14" />
+                        </Button>
+                        <Button Command="{Binding RefreshCommand}"
+                                Padding="6,4"
+                                ToolTip.Tip="Refresh (Ctrl+R)">
+                            <PathIcon Data="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 0 0-8 8 8 8 0 0 0 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18a6 6 0 0 1-6-6 6 6 0 0 1 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35Z" 
+                                      Width="14" Height="14" />
+                        </Button>
+                    </StackPanel>
+
+                    <!-- Search Box (shown when search is active) -->
+                    <Border Grid.Row="1" Grid.ColumnSpan="3" 
+                            IsVisible="{Binding IsSearchActive}"
+                            Margin="0,4,0,0"
+                            Padding="4">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBox Grid.Column="0"
+                                     Text="{Binding SearchFilter}"
+                                     Watermark="Type to filter..."
+                                     Classes="search-input" />
+                            <Button Grid.Column="1"
+                                    Command="{Binding ClearSearchCommand}"
+                                    Padding="6,4"
+                                    Margin="4,0,0,0"
+                                    ToolTip.Tip="Clear search">
+                                <PathIcon Data="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z" 
+                                          Width="12" Height="12" />
+                            </Button>
+                        </Grid>
+                    </Border>
                 </Grid>
             </Border>
 
@@ -59,7 +136,7 @@
                          Height="2" />
 
             <!-- File List -->
-            <ListBox ItemsSource="{Binding Entries}"
+            <ListBox ItemsSource="{Binding FilteredEntries}"
                      SelectedItem="{Binding SelectedEntry}"
                      SelectionMode="Multiple"
                      DoubleTapped="ListBox_DoubleTapped"

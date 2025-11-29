@@ -55,3 +55,5 @@ Instalador/
 # Old project files
 sharpCommander/bin/
 sharpCommander/obj/
+publish/
+

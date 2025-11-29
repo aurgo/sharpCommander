@@ -41,6 +41,10 @@ public partial class FilePanelView : UserControl
                     viewModel.NavigateUpCommand.Execute(null);
                     e.Handled = true;
                     break;
+                case Key.F5:
+                    viewModel.RefreshCommand.Execute(null);
+                    e.Handled = true;
+                    break;
             }
         }
     }
@@ -118,6 +122,45 @@ public sealed class FileColorConverter : IValueConverter
             FileSystemEntryType.ParentDirectory => new SolidColorBrush(Color.FromRgb(102, 102, 102)),
             _ => new SolidColorBrush(Color.FromRgb(128, 128, 128))
         };
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        throw new NotSupportedException();
+    }
+}
+
+/// <summary>
+/// Converts favorite boolean to star icon.
+/// </summary>
+public sealed class FavoriteIconConverter : IValueConverter
+{
+    private const string StarFilled = "M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27Z";
+    private const string StarOutline = "M12 15.39l-3.76 2.27.99-4.28-3.32-2.88 4.38-.37L12 6.09l1.71 4.04 4.38.37-3.32 2.88.99 4.28M22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27 18.18 21l-1.64-7.03L22 9.24Z";
+
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var isFavorite = value is true;
+        return Geometry.Parse(isFavorite ? StarFilled : StarOutline);
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        throw new NotSupportedException();
+    }
+}
+
+/// <summary>
+/// Converts favorite boolean to color.
+/// </summary>
+public sealed class FavoriteColorConverter : IValueConverter
+{
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var isFavorite = value is true;
+        return isFavorite 
+            ? new SolidColorBrush(Color.FromRgb(255, 193, 7))  // Gold
+            : new SolidColorBrush(Color.FromRgb(128, 128, 128)); // Gray
     }
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)

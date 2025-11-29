@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Data.Core.Plugins;
@@ -18,15 +19,21 @@ public sealed class App : Application
         AvaloniaXamlLoader.Load(this);
     }
 
+    [UnconditionalSuppressMessage("Trimming", "IL2026:RequiresUnreferencedCode", 
+        Justification = "Avalonia's DataValidators is safe to use with compiled bindings")]
     public override void OnFrameworkInitializationCompleted()
     {
-        // Avoid duplicate validation plugins
-        BindingPlugins.DataValidators.RemoveAt(0);
+        // Avoid duplicate validation plugins - safe with compiled bindings
+        if (BindingPlugins.DataValidators.Count > 0)
+        {
+            BindingPlugins.DataValidators.RemoveAt(0);
+        }
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var fileSystemService = new FileSystemService();
-            var mainViewModel = new MainWindowViewModel(fileSystemService);
+            var settingsService = new SettingsService();
+            var mainViewModel = new MainWindowViewModel(fileSystemService, settingsService);
             
             desktop.MainWindow = new MainWindow
             {

@@ -14,6 +14,7 @@ namespace SharpCommander.Desktop.ViewModels;
 public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
 {
     private readonly IFileSystemService _fileSystemService;
+    private readonly ISettingsService _settingsService;
     private readonly FileSystemWatcherService _watcher;
     private bool _disposed;
 
@@ -24,7 +25,13 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
     private string _displayPath = string.Empty;
 
     [ObservableProperty]
+    private string _editablePath = string.Empty;
+
+    [ObservableProperty]
     private ObservableCollection<FileSystemEntry> _entries = [];
+
+    [ObservableProperty]
+    private ObservableCollection<FileSystemEntry> _filteredEntries = [];
 
     [ObservableProperty]
     private FileSystemEntry? _selectedEntry;
@@ -41,15 +48,59 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _isRootView;
 
-    public FilePanelViewModel(IFileSystemService fileSystemService)
+    [ObservableProperty]
+    private ObservableCollection<NavigationHistoryItem> _navigationHistory = [];
+
+    [ObservableProperty]
+    private NavigationHistoryItem? _selectedHistoryItem;
+
+    [ObservableProperty]
+    private string _searchFilter = string.Empty;
+
+    [ObservableProperty]
+    private bool _isSearchActive;
+
+    [ObservableProperty]
+    private bool _isFavorite;
+
+    [ObservableProperty]
+    private ObservableCollection<FavoriteItem> _favorites = [];
+
+    public FilePanelViewModel(IFileSystemService fileSystemService, ISettingsService settingsService)
     {
         _fileSystemService = fileSystemService;
+        _settingsService = settingsService;
         _watcher = new FileSystemWatcherService();
         _watcher.Changed += OnFileSystemChanged;
+        
+        // Note: LoadFavorites() and LoadHistory() are called later in InitializeAsync()
+        // after settings have been loaded from disk
+    }
+
+    public void LoadFavorites()
+    {
+        Favorites.Clear();
+        foreach (var fav in _settingsService.Settings.Favorites.OrderBy(f => f.Order))
+        {
+            Favorites.Add(fav);
+        }
+    }
+
+    private void LoadHistory()
+    {
+        NavigationHistory.Clear();
+        foreach (var item in _settingsService.GetRecentHistory(30))
+        {
+            NavigationHistory.Add(item);
+        }
     }
 
     public async Task InitializeAsync(string? path = null)
     {
+        // Load favorites and history now that settings are loaded from disk
+        LoadFavorites();
+        LoadHistory();
+        
         var initialPath = path ?? _fileSystemService.GetDefaultDirectory();
         await NavigateToAsync(initialPath);
     }
@@ -67,9 +118,12 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
                 // Show drives
                 var drives = await _fileSystemService.GetDrivesAsync();
                 Entries = new ObservableCollection<FileSystemEntry>(drives);
+                FilteredEntries = new ObservableCollection<FileSystemEntry>(drives);
                 CurrentPath = string.Empty;
                 DisplayPath = "Computer";
+                EditablePath = string.Empty;
                 IsRootView = true;
+                IsFavorite = false;
                 UpdateStatus(drives.Count, 0, 0);
                 return;
             }
@@ -78,11 +132,18 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
             {
                 var entries = await _fileSystemService.GetEntriesAsync(path);
                 Entries = new ObservableCollection<FileSystemEntry>(entries);
+                ApplySearchFilter();
                 CurrentPath = path;
                 DisplayPath = path;
+                EditablePath = path;
                 IsRootView = false;
+                IsFavorite = _settingsService.IsFavorite(path);
                 
                 _watcher.Start(path);
+                
+                // Add to history
+                await _settingsService.AddToHistoryAsync(path);
+                LoadHistory();
                 
                 var dirCount = entries.Count(e => e.EntryType == FileSystemEntryType.Directory);
                 var fileCount = entries.Count(e => e.EntryType == FileSystemEntryType.File);
@@ -102,6 +163,33 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
         finally
         {
             IsLoading = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task NavigateToPathAsync()
+    {
+        if (!string.IsNullOrEmpty(EditablePath))
+        {
+            await NavigateToAsync(EditablePath);
+        }
+    }
+
+    [RelayCommand]
+    private async Task NavigateToHistoryItemAsync(NavigationHistoryItem? item)
+    {
+        if (item is not null)
+        {
+            await NavigateToAsync(item.Path);
+        }
+    }
+
+    [RelayCommand]
+    private async Task NavigateToFavoriteAsync(FavoriteItem? favorite)
+    {
+        if (favorite is not null)
+        {
+            await NavigateToAsync(favorite.Path);
         }
     }
 
@@ -146,6 +234,89 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
             case FileSystemEntryType.File:
                 await _fileSystemService.OpenWithDefaultAsync(SelectedEntry.FullPath);
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Event raised when favorites list changes (add/remove).
+    /// </summary>
+    public event EventHandler? FavoritesChanged;
+
+    [RelayCommand]
+    private async Task ToggleFavoriteAsync()
+    {
+        if (string.IsNullOrEmpty(CurrentPath) || IsRootView)
+        {
+            return;
+        }
+
+        if (IsFavorite)
+        {
+            await _settingsService.RemoveFavoriteAsync(CurrentPath);
+        }
+        else
+        {
+            await _settingsService.AddFavoriteAsync(CurrentPath);
+        }
+
+        IsFavorite = _settingsService.IsFavorite(CurrentPath);
+        LoadFavorites();
+        FavoritesChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    [RelayCommand]
+    private async Task AddToFavoritesAsync()
+    {
+        if (SelectedEntry?.EntryType == FileSystemEntryType.Directory)
+        {
+            await _settingsService.AddFavoriteAsync(SelectedEntry.FullPath, SelectedEntry.Name);
+            LoadFavorites();
+            FavoritesChanged?.Invoke(this, EventArgs.Empty);
+        }
+        else if (!string.IsNullOrEmpty(CurrentPath) && !IsRootView)
+        {
+            await _settingsService.AddFavoriteAsync(CurrentPath);
+            IsFavorite = true;
+            LoadFavorites();
+            FavoritesChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    [RelayCommand]
+    private void ToggleSearch()
+    {
+        IsSearchActive = !IsSearchActive;
+        if (!IsSearchActive)
+        {
+            SearchFilter = string.Empty;
+            ApplySearchFilter();
+        }
+    }
+
+    [RelayCommand]
+    private void ClearSearch()
+    {
+        SearchFilter = string.Empty;
+        IsSearchActive = false;
+        ApplySearchFilter();
+    }
+
+    partial void OnSearchFilterChanged(string value)
+    {
+        ApplySearchFilter();
+    }
+
+    private void ApplySearchFilter()
+    {
+        if (string.IsNullOrWhiteSpace(SearchFilter))
+        {
+            FilteredEntries = new ObservableCollection<FileSystemEntry>(Entries);
+        }
+        else
+        {
+            var filtered = Entries.Where(e => 
+                e.Name.Contains(SearchFilter, StringComparison.OrdinalIgnoreCase));
+            FilteredEntries = new ObservableCollection<FileSystemEntry>(filtered);
         }
     }
 
