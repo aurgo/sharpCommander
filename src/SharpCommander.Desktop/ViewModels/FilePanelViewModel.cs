@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using SharpCommander.Core.Interfaces;
 using SharpCommander.Core.Models;
 using SharpCommander.Desktop.Services;
+using SharpCommander.Desktop.Utilities;
 
 namespace SharpCommander.Desktop.ViewModels;
 
@@ -159,23 +160,8 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
 
     private void UpdateStatus(int directories, int files, long totalSize)
     {
-        var sizeText = FormatSize(totalSize);
+        var sizeText = FileSizeFormatter.Format(totalSize);
         StatusText = $"{directories} folders, {files} files ({sizeText})";
-    }
-
-    private static string FormatSize(long bytes)
-    {
-        string[] suffixes = ["B", "KB", "MB", "GB", "TB"];
-        int index = 0;
-        double size = bytes;
-
-        while (size >= 1024 && index < suffixes.Length - 1)
-        {
-            size /= 1024;
-            index++;
-        }
-
-        return $"{size:N1} {suffixes[index]}";
     }
 
     private async void OnFileSystemChanged(object? sender, FileSystemChangedEventArgs e)

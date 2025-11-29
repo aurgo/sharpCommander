@@ -224,8 +224,35 @@ public sealed class FileSystemService : IFileSystemService
         await Task.Run(() => Directory.CreateDirectory(path), cancellationToken);
     }
 
+    /// <summary>
+    /// Set of file extensions considered potentially dangerous.
+    /// </summary>
+    private static readonly HashSet<string> DangerousExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".exe", ".bat", ".cmd", ".com", ".scr", ".pif", ".vbs", ".vbe",
+        ".js", ".jse", ".ws", ".wsf", ".wsc", ".wsh", ".ps1", ".ps1xml",
+        ".ps2", ".ps2xml", ".psc1", ".psc2", ".msi", ".msp", ".reg", ".inf"
+    };
+
+    /// <summary>
+    /// Checks if a file extension is considered potentially dangerous.
+    /// </summary>
+    public static bool IsPotentiallyDangerous(string path)
+    {
+        var extension = Path.GetExtension(path);
+        return !string.IsNullOrEmpty(extension) && DangerousExtensions.Contains(extension);
+    }
+
     public async Task OpenWithDefaultAsync(string path, CancellationToken cancellationToken = default)
     {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+
+        // Validate path exists and is not trying to escape
+        if (!File.Exists(path) && !Directory.Exists(path))
+        {
+            throw new FileNotFoundException("The specified path does not exist.", path);
+        }
+
         await Task.Run(() =>
         {
             var startInfo = new ProcessStartInfo

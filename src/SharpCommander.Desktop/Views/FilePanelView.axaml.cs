@@ -2,9 +2,9 @@ using System.Globalization;
 using Avalonia.Controls;
 using Avalonia.Data.Converters;
 using Avalonia.Input;
-using Avalonia.Interactivity;
 using Avalonia.Media;
 using SharpCommander.Core.Models;
+using SharpCommander.Desktop.Utilities;
 using SharpCommander.Desktop.ViewModels;
 
 namespace SharpCommander.Desktop.Views;
@@ -60,22 +60,7 @@ public sealed class FileSizeConverter : IValueConverter
             return string.Empty;
         }
 
-        if (bytes == 0)
-        {
-            return "<DIR>";
-        }
-
-        string[] suffixes = ["B", "KB", "MB", "GB", "TB"];
-        int index = 0;
-        double size = bytes;
-
-        while (size >= 1024 && index < suffixes.Length - 1)
-        {
-            size /= 1024;
-            index++;
-        }
-
-        return $"{size:N1} {suffixes[index]}";
+        return FileSizeFormatter.FormatForDisplay(bytes);
     }
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
