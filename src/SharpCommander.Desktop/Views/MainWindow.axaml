@@ -1,0 +1,135 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:SharpCommander.Desktop.ViewModels"
+        xmlns:views="using:SharpCommander.Desktop.Views"
+        mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="800"
+        x:Class="SharpCommander.Desktop.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="{Binding Title}"
+        Width="1200" Height="800"
+        MinWidth="800" MinHeight="500"
+        WindowStartupLocation="CenterScreen">
+
+    <Window.KeyBindings>
+        <KeyBinding Gesture="F5" Command="{Binding CopyCommand}" />
+        <KeyBinding Gesture="F6" Command="{Binding MoveCommand}" />
+        <KeyBinding Gesture="Delete" Command="{Binding DeleteCommand}" />
+        <KeyBinding Gesture="Ctrl+R" Command="{Binding RefreshCommand}" />
+    </Window.KeyBindings>
+
+    <DockPanel>
+        <!-- Menu Bar -->
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="_File">
+                <MenuItem Header="_Copy" InputGesture="F5" Command="{Binding CopyCommand}">
+                    <MenuItem.Icon>
+                        <PathIcon Data="M19 21H8V7h11m0-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2m-3-4H4a2 2 0 0 0-2 2v14h2V3h12V1Z" />
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="_Move" InputGesture="F6" Command="{Binding MoveCommand}">
+                    <MenuItem.Icon>
+                        <PathIcon Data="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6m4 18H6V4h7v5h5v11m-3-9v4h-4v-4H9l5-5 5 5h-3Z" />
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="_Delete" InputGesture="Delete" Command="{Binding DeleteCommand}">
+                    <MenuItem.Icon>
+                        <PathIcon Data="M19 4h-3.5l-1-1h-5l-1 1H5v2h14M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12Z" />
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator />
+                <MenuItem Header="E_xit" InputGesture="Alt+F4" Click="Exit_Click">
+                    <MenuItem.Icon>
+                        <PathIcon Data="M16 17v-3H9v-4h7V7l5 5-5 5M14 2a2 2 0 0 1 2 2v2h-2V4H5v16h9v-2h2v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9Z" />
+                    </MenuItem.Icon>
+                </MenuItem>
+            </MenuItem>
+            <MenuItem Header="_Edit">
+                <MenuItem Header="_Refresh" InputGesture="Ctrl+R" Command="{Binding RefreshCommand}">
+                    <MenuItem.Icon>
+                        <PathIcon Data="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 0 0-8 8 8 8 0 0 0 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18a6 6 0 0 1-6-6 6 6 0 0 1 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35Z" />
+                    </MenuItem.Icon>
+                </MenuItem>
+            </MenuItem>
+            <MenuItem Header="_View">
+                <MenuItem Header="_Theme">
+                    <MenuItem Header="_Light" Click="ThemeLight_Click" />
+                    <MenuItem Header="_Dark" Click="ThemeDark_Click" />
+                    <MenuItem Header="_System Default" Click="ThemeDefault_Click" />
+                </MenuItem>
+            </MenuItem>
+            <MenuItem Header="_Help">
+                <MenuItem Header="_About SharpCommander" Click="About_Click">
+                    <MenuItem.Icon>
+                        <PathIcon Data="M11 9h2V7h-2m1 13c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8m0-18A10 10 0 0 0 2 12a10 10 0 0 0 10 10 10 10 0 0 0 10-10A10 10 0 0 0 12 2m-1 15h2v-6h-2v6Z" />
+                    </MenuItem.Icon>
+                </MenuItem>
+            </MenuItem>
+        </Menu>
+
+        <!-- Toolbar -->
+        <Border DockPanel.Dock="Top" Classes="toolbar">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+                <Button Classes="toolbar-button" Command="{Binding CopyCommand}" ToolTip.Tip="Copy (F5)">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <PathIcon Data="M19 21H8V7h11m0-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2m-3-4H4a2 2 0 0 0-2 2v14h2V3h12V1Z" Width="16" Height="16" />
+                        <TextBlock Text="Copy" />
+                    </StackPanel>
+                </Button>
+                <Button Classes="toolbar-button" Command="{Binding MoveCommand}" ToolTip.Tip="Move (F6)">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <PathIcon Data="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6m4 18H6V4h7v5h5v11m-3-9v4h-4v-4H9l5-5 5 5h-3Z" Width="16" Height="16" />
+                        <TextBlock Text="Move" />
+                    </StackPanel>
+                </Button>
+                <Button Classes="toolbar-button" Command="{Binding DeleteCommand}" ToolTip.Tip="Delete (Del)">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <PathIcon Data="M19 4h-3.5l-1-1h-5l-1 1H5v2h14M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12Z" Width="16" Height="16" />
+                        <TextBlock Text="Delete" />
+                    </StackPanel>
+                </Button>
+                <Separator Width="1" Margin="8,0" />
+                <Button Classes="toolbar-button" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh (Ctrl+R)">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <PathIcon Data="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 0 0-8 8 8 8 0 0 0 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18a6 6 0 0 1-6-6 6 6 0 0 1 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35Z" Width="16" Height="16" />
+                        <TextBlock Text="Refresh" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Border>
+
+        <!-- Status Bar -->
+        <Border DockPanel.Dock="Bottom" Classes="status-bar">
+            <Grid ColumnDefinitions="*,Auto,Auto">
+                <TextBlock Grid.Column="0" Classes="status-text" Text="{Binding StatusMessage}" />
+                <ProgressBar Grid.Column="1" 
+                             Width="150" 
+                             Margin="12,0"
+                             Value="{Binding OperationProgress}"
+                             IsVisible="{Binding IsOperationInProgress}"
+                             IsIndeterminate="False" />
+                <TextBlock Grid.Column="2" 
+                           Classes="status-text" 
+                           Text="{Binding CurrentOperation}"
+                           IsVisible="{Binding IsOperationInProgress}" />
+            </Grid>
+        </Border>
+
+        <!-- Main Content - Dual Pane -->
+        <Grid ColumnDefinitions="*,4,*">
+            <views:FilePanelView Grid.Column="0" 
+                                 DataContext="{Binding LeftPanel}"
+                                 GotFocus="LeftPanel_GotFocus" />
+            
+            <GridSplitter Grid.Column="1" 
+                          Width="4" 
+                          Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                          ResizeBehavior="PreviousAndNext" />
+            
+            <views:FilePanelView Grid.Column="2" 
+                                 DataContext="{Binding RightPanel}"
+                                 GotFocus="RightPanel_GotFocus" />
+        </Grid>
+    </DockPanel>
+</Window>
