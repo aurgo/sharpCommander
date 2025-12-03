@@ -14,6 +14,7 @@
         WindowStartupLocation="CenterScreen">
 
     <Window.KeyBindings>
+        <KeyBinding Gesture="F2" Command="{Binding RenameCommand}" />
         <KeyBinding Gesture="F3" Command="{Binding ViewCommand}" />
         <KeyBinding Gesture="F4" Command="{Binding EditCommand}" />
         <KeyBinding Gesture="F5" Command="{Binding CopyCommand}" />
@@ -42,6 +43,12 @@
                 <MenuItem Header="_Edit" InputGesture="F4" Command="{Binding EditCommand}">
                     <MenuItem.Icon>
                         <PathIcon Data="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75L3 17.25Z" />
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator />
+                <MenuItem Header="_Rename" InputGesture="F2" Command="{Binding RenameCommand}">
+                    <MenuItem.Icon>
+                        <PathIcon Data="M14.06 9.02l.92.92L5.92 19H5v-.92l9.06-9.06M17.66 3c-.25 0-.51.1-.7.29l-1.83 1.83 3.75 3.75 1.83-1.83a.996.996 0 0 0 0-1.41l-2.34-2.34c-.2-.2-.45-.29-.71-.29zm-3.6 3.19L3 17.25V21h3.75L17.81 9.94l-3.75-3.75z" />
                     </MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="_Copy" InputGesture="F5" Command="{Binding CopyCommand}">
