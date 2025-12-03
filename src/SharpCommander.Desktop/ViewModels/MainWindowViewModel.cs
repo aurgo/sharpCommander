@@ -13,6 +13,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 {
     private readonly IFileSystemService _fileSystemService;
     private readonly ISettingsService _settingsService;
+    private readonly IDialogService _dialogService;
 
     [ObservableProperty]
     private ObservableCollection<TabViewModel> _tabs = [];
@@ -52,17 +53,18 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private bool _clipboardCutMode = false;
 
     public string Title => "SharpCommander - File Manager";
-    
+
     public string Version => "2.0.0";
 
-    public MainWindowViewModel(IFileSystemService fileSystemService, ISettingsService settingsService)
+    public MainWindowViewModel(IFileSystemService fileSystemService, ISettingsService settingsService, IDialogService dialogService)
     {
         _fileSystemService = fileSystemService;
         _settingsService = settingsService;
+        _dialogService = dialogService;
         _leftPanel = new FilePanelViewModel(fileSystemService, settingsService);
         _rightPanel = new FilePanelViewModel(fileSystemService, settingsService);
         _activePanel = _leftPanel;
-        
+
         // Subscribe to favorites changes to sync both panels
         _leftPanel.FavoritesChanged += OnFavoritesChanged;
         _rightPanel.FavoritesChanged += OnFavoritesChanged;
@@ -101,10 +103,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         // Load settings from disk first (includes favorites and history)
         await _settingsService.LoadAsync();
-        
+
         var leftPath = _settingsService.Settings.LastLeftPanelPath ?? _fileSystemService.GetDefaultDirectory();
         var rightPath = _settingsService.Settings.LastRightPanelPath ?? _fileSystemService.GetDefaultDirectory();
-        
+
         // Initialize the default tab
         if (CurrentTab != null)
         {
@@ -253,7 +255,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         // Default name - in a real app would show a dialog
         var newFolderName = "New Folder";
         var newFolderPath = Path.Combine(ActivePanel.CurrentPath, newFolderName);
-        
+
         // Find unique name
         var counter = 1;
         while (Directory.Exists(newFolderPath))
@@ -516,50 +518,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
         try
         {
-            IsOperationInProgress = true;
-            StatusMessage = "Calculating hashes...";
-
-            var filePath = ActivePanel.SelectedEntry.FullPath;
-            
-            await Task.Run(() =>
-            {
-                // Note: MD5 and SHA1 are included for compatibility and verification purposes
-                // (e.g., verifying downloads, comparing against existing checksums)
-                // For security purposes, SHA256 is recommended
-                using var md5 = System.Security.Cryptography.MD5.Create();
-                using var sha1 = System.Security.Cryptography.SHA1.Create();
-                using var sha256 = System.Security.Cryptography.SHA256.Create();
-                using var stream = File.OpenRead(filePath);
-
-                const int BufferSize = 8192;
-                var buffer = new byte[BufferSize];
-                int bytesRead;
-
-                while ((bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
-                {
-                    md5.TransformBlock(buffer, 0, bytesRead, null, 0);
-                    sha1.TransformBlock(buffer, 0, bytesRead, null, 0);
-                    sha256.TransformBlock(buffer, 0, bytesRead, null, 0);
-                }
-
-                md5.TransformFinalBlock(buffer, 0, 0);
-                sha1.TransformFinalBlock(buffer, 0, 0);
-                sha256.TransformFinalBlock(buffer, 0, 0);
-
-                var md5Hash = BitConverter.ToString(md5.Hash!).Replace("-", "");
-                var sha1Hash = BitConverter.ToString(sha1.Hash!).Replace("-", "");
-                var sha256Hash = BitConverter.ToString(sha256.Hash!).Replace("-", "");
-
-                StatusMessage = $"MD5: {md5Hash} | SHA1: {sha1Hash} | SHA256: {sha256Hash}";
-            });
+            await _dialogService.ShowHashDialogAsync(ActivePanel.SelectedEntry.FullPath);
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Error calculating hash: {ex.Message}";
-        }
-        finally
-        {
-            IsOperationInProgress = false;
+            StatusMessage = $"Error showing hash dialog: {ex.Message}";
         }
     }
 
@@ -570,7 +533,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         IsOperationInProgress = true;
         CurrentOperation = operationName;
-        
+
         try
         {
             var progress = new Progress<FileOperationProgress>(p =>

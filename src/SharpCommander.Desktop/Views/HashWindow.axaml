@@ -1,0 +1,47 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:SharpCommander.Desktop.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="400"
+        x:Class="SharpCommander.Desktop.Views.HashWindow"
+        x:DataType="vm:HashViewModel"
+        Title="File Hashes"
+        Width="600" Height="400"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.header">
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+        </Style>
+    </Window.Styles>
+
+    <Border Padding="20">
+        <DockPanel>
+            <!-- Close Button -->
+            <Button DockPanel.Dock="Bottom"
+                    Content="Close"
+                    HorizontalAlignment="Right"
+                    Margin="0,20,0,0"
+                    Padding="20,8"
+                    Click="Close_Click" />
+
+            <!-- Content -->
+            <Grid RowDefinitions="Auto,*">
+                <TextBlock Grid.Row="0" 
+                           Classes="header" 
+                           Text="File Checksums" />
+                
+                <TextBox Grid.Row="1"
+                         Text="{Binding AllHashes}"
+                         IsReadOnly="True"
+                         TextWrapping="Wrap"
+                         AcceptsReturn="True"
+                         FontFamily="Consolas, Monospace" />
+            </Grid>
+        </DockPanel>
+    </Border>
+</Window>

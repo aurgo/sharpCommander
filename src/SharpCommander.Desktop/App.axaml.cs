@@ -19,7 +19,7 @@ public sealed class App : Application
         AvaloniaXamlLoader.Load(this);
     }
 
-    [UnconditionalSuppressMessage("Trimming", "IL2026:RequiresUnreferencedCode", 
+    [UnconditionalSuppressMessage("Trimming", "IL2026:RequiresUnreferencedCode",
         Justification = "Avalonia's DataValidators is safe to use with compiled bindings")]
     public override void OnFrameworkInitializationCompleted()
     {
@@ -33,8 +33,9 @@ public sealed class App : Application
         {
             var fileSystemService = new FileSystemService();
             var settingsService = new SettingsService();
-            var mainViewModel = new MainWindowViewModel(fileSystemService, settingsService);
-            
+            var dialogService = new DialogService();
+            var mainViewModel = new MainWindowViewModel(fileSystemService, settingsService, dialogService);
+
             desktop.MainWindow = new MainWindow
             {
                 DataContext = mainViewModel

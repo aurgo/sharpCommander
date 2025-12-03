@@ -11,6 +11,7 @@
     <RootNamespace>sharpCommander</RootNamespace>
     <AssemblyName>sharpCommander</AssemblyName>
     <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
+    <ApplicationIcon>Resources\icon.ico</ApplicationIcon>
     <FileAlignment>512</FileAlignment>
     <IsWebBootstrapper>true</IsWebBootstrapper>
     <ManifestCertificateThumbprint>E149F5E611E3A38AE1EABF2B6529E818FBFBD34E</ManifestCertificateThumbprint>
@@ -95,6 +96,24 @@
     <Compile Include="Main.Designer.cs">
       <DependentUpon>Main.cs</DependentUpon>
     </Compile>
+    <Compile Include="HashDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="HashDialog.Designer.cs">
+      <DependentUpon>HashDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="RenameDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="RenameDialog.Designer.cs">
+      <DependentUpon>RenameDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="SearchDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="SearchDialog.Designer.cs">
+      <DependentUpon>SearchDialog.cs</DependentUpon>
+    </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <EmbeddedResource Include="AboutBox.resx">
@@ -105,6 +124,15 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Main.resx">
       <DependentUpon>Main.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="HashDialog.resx">
+      <DependentUpon>HashDialog.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="RenameDialog.resx">
+      <DependentUpon>RenameDialog.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="SearchDialog.resx">
+      <DependentUpon>SearchDialog.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>

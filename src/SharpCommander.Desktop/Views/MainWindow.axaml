@@ -250,21 +250,7 @@
         </Border>
 
         <!-- Status Bar -->
-        <Border DockPanel.Dock="Bottom" Classes="status-bar">
-            <Grid ColumnDefinitions="*,Auto,Auto">
-                <TextBlock Grid.Column="0" Classes="status-text" Text="{Binding StatusMessage}" />
-                <ProgressBar Grid.Column="1" 
-                             Width="150" 
-                             Margin="12,0"
-                             Value="{Binding OperationProgress}"
-                             IsVisible="{Binding IsOperationInProgress}"
-                             IsIndeterminate="False" />
-                <TextBlock Grid.Column="2" 
-                           Classes="status-text" 
-                           Text="{Binding CurrentOperation}"
-                           IsVisible="{Binding IsOperationInProgress}" />
-            </Grid>
-        </Border>
+
 
         <!-- Main Content -->
         <Grid>
