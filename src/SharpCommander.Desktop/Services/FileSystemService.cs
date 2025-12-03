@@ -28,6 +28,18 @@ public sealed class FileSystemService : IFileSystemService
 
             try
             {
+                // Add parent directory entry ".." if not at root
+                if (directoryInfo.Parent != null)
+                {
+                    entries.Add(new FileSystemEntry
+                    {
+                        Name = "..",
+                        FullPath = directoryInfo.Parent.FullName,
+                        EntryType = FileSystemEntryType.ParentDirectory,
+                        LastModified = directoryInfo.Parent.LastWriteTime
+                    });
+                }
+
                 // Add directories first
                 foreach (var dir in directoryInfo.GetDirectories())
                 {
@@ -258,7 +270,9 @@ public sealed class FileSystemService : IFileSystemService
             var startInfo = new ProcessStartInfo
             {
                 FileName = path,
-                UseShellExecute = true
+                UseShellExecute = true,
+                // Set working directory to the file's directory, not the app's directory
+                WorkingDirectory = Path.GetDirectoryName(path) ?? string.Empty
             };
             Process.Start(startInfo);
         }, cancellationToken);

@@ -40,6 +40,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _newItemName = string.Empty;
 
+    // Clipboard-related properties
+    private List<FileSystemEntry> _clipboardItems = new();
+    private bool _clipboardCutMode = false;
+
     public string Title => "SharpCommander - File Manager";
     
     public string Version => "2.0.0";
@@ -304,6 +308,111 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private void ShowAbout()
     {
         // This will be handled in the View layer
+    }
+
+    [RelayCommand]
+    private void SelectAll()
+    {
+        if (ActivePanel?.FilteredEntries == null)
+        {
+            return;
+        }
+
+        ActivePanel.SelectedEntries.Clear();
+        foreach (var entry in ActivePanel.FilteredEntries)
+        {
+            // Don't select the parent directory entry
+            if (entry.EntryType != FileSystemEntryType.ParentDirectory)
+            {
+                ActivePanel.SelectedEntries.Add(entry);
+            }
+        }
+        StatusMessage = $"Selected {ActivePanel.SelectedEntries.Count} item(s)";
+    }
+
+    [RelayCommand]
+    private void CopyToClipboard()
+    {
+        if (ActivePanel == null)
+        {
+            return;
+        }
+
+        var selectedItems = ActivePanel.GetSelectedItems();
+        if (selectedItems.Count == 0)
+        {
+            return;
+        }
+
+        _clipboardItems = selectedItems.ToList();
+        _clipboardCutMode = false;
+        StatusMessage = $"Copied {_clipboardItems.Count} item(s) to clipboard";
+    }
+
+    [RelayCommand]
+    private void CutToClipboard()
+    {
+        if (ActivePanel == null)
+        {
+            return;
+        }
+
+        var selectedItems = ActivePanel.GetSelectedItems();
+        if (selectedItems.Count == 0)
+        {
+            return;
+        }
+
+        _clipboardItems = selectedItems.ToList();
+        _clipboardCutMode = true;
+        StatusMessage = $"Cut {_clipboardItems.Count} item(s) to clipboard";
+    }
+
+    [RelayCommand]
+    private async Task PasteFromClipboardAsync()
+    {
+        if (ActivePanel == null || _clipboardItems.Count == 0)
+        {
+            StatusMessage = "Clipboard is empty";
+            return;
+        }
+
+        if (string.IsNullOrEmpty(ActivePanel.CurrentPath))
+        {
+            StatusMessage = "Cannot paste to root view";
+            return;
+        }
+
+        var destination = ActivePanel.CurrentPath;
+
+        if (_clipboardCutMode)
+        {
+            // Move operation
+            await ExecuteFileOperationAsync(
+                "Moving",
+                _clipboardItems,
+                async (item, progress) =>
+                {
+                    await _fileSystemService.MoveAsync(item.FullPath, destination, true, progress);
+                }
+            );
+            _clipboardItems.Clear();
+            _clipboardCutMode = false;
+        }
+        else
+        {
+            // Copy operation
+            await ExecuteFileOperationAsync(
+                "Pasting",
+                _clipboardItems,
+                async (item, progress) =>
+                {
+                    await _fileSystemService.CopyAsync(item.FullPath, destination, true, progress);
+                }
+            );
+        }
+
+        await ActivePanel.RefreshAsync();
     }
 
     private async Task ExecuteFileOperationAsync(
