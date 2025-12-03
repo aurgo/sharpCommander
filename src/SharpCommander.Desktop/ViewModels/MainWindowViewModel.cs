@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SharpCommander.Core.Interfaces;
@@ -12,6 +13,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 {
     private readonly IFileSystemService _fileSystemService;
     private readonly ISettingsService _settingsService;
+
+    [ObservableProperty]
+    private ObservableCollection<TabViewModel> _tabs = [];
+
+    [ObservableProperty]
+    private TabViewModel? _currentTab;
 
     [ObservableProperty]
     private FilePanelViewModel _leftPanel;
@@ -40,6 +47,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _newItemName = string.Empty;
 
+    // Clipboard-related properties
+    private List<FileSystemEntry> _clipboardItems = new();
+    private bool _clipboardCutMode = false;
+
     public string Title => "SharpCommander - File Manager";
     
     public string Version => "2.0.0";
@@ -55,6 +66,22 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         // Subscribe to favorites changes to sync both panels
         _leftPanel.FavoritesChanged += OnFavoritesChanged;
         _rightPanel.FavoritesChanged += OnFavoritesChanged;
+
+        // Initialize with a default tab
+        var defaultTab = new TabViewModel(fileSystemService, settingsService);
+        Tabs.Add(defaultTab);
+        CurrentTab = defaultTab;
+    }
+
+    partial void OnCurrentTabChanged(TabViewModel? value)
+    {
+        if (value != null)
+        {
+            // Update the main panels when tab changes
+            LeftPanel = value.LeftPanel;
+            RightPanel = value.RightPanel;
+            ActivePanel = value.ActivePanel;
+        }
     }
 
     private void OnFavoritesChanged(object? sender, EventArgs e)
@@ -78,11 +105,14 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         var leftPath = _settingsService.Settings.LastLeftPanelPath ?? _fileSystemService.GetDefaultDirectory();
         var rightPath = _settingsService.Settings.LastRightPanelPath ?? _fileSystemService.GetDefaultDirectory();
         
-        // Now initialize panels - this will load favorites and history from already-loaded settings
-        await Task.WhenAll(
-            LeftPanel.InitializeAsync(leftPath),
-            RightPanel.InitializeAsync(rightPath)
-        );
+        // Initialize the default tab
+        if (CurrentTab != null)
+        {
+            await CurrentTab.InitializeAsync(leftPath, rightPath);
+            LeftPanel = CurrentTab.LeftPanel;
+            RightPanel = CurrentTab.RightPanel;
+            ActivePanel = CurrentTab.ActivePanel;
+        }
     }
 
     public async Task SaveStateAsync()
@@ -301,9 +331,236 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
+    private async Task NewTabAsync()
+    {
+        var newTab = new TabViewModel(_fileSystemService, _settingsService);
+        await newTab.InitializeAsync();
+        Tabs.Add(newTab);
+        CurrentTab = newTab;
+        StatusMessage = "New tab created";
+    }
+
+    [RelayCommand]
+    private void CloseTab(TabViewModel? tab)
+    {
+        if (tab == null || Tabs.Count <= 1)
+        {
+            StatusMessage = "Cannot close the last tab";
+            return;
+        }
+
+        var index = Tabs.IndexOf(tab);
+        tab.Dispose();
+        Tabs.Remove(tab);
+
+        // Select the previous tab or the first tab
+        if (CurrentTab == tab)
+        {
+            CurrentTab = index > 0 ? Tabs[index - 1] : Tabs[0];
+        }
+
+        StatusMessage = "Tab closed";
+    }
+
+    [RelayCommand]
     private void ShowAbout()
     {
         // This will be handled in the View layer
+    }
+
+    [RelayCommand]
+    private void SelectAll()
+    {
+        if (ActivePanel?.FilteredEntries == null)
+        {
+            return;
+        }
+
+        ActivePanel.SelectedEntries.Clear();
+        foreach (var entry in ActivePanel.FilteredEntries)
+        {
+            // Don't select the parent directory entry
+            if (entry.EntryType != FileSystemEntryType.ParentDirectory)
+            {
+                ActivePanel.SelectedEntries.Add(entry);
+            }
+        }
+        StatusMessage = $"Selected {ActivePanel.SelectedEntries.Count} item(s)";
+    }
+
+    [RelayCommand]
+    private void CopyToClipboard()
+    {
+        if (ActivePanel == null)
+        {
+            return;
+        }
+
+        var selectedItems = ActivePanel.GetSelectedItems();
+        if (selectedItems.Count == 0)
+        {
+            return;
+        }
+
+        _clipboardItems = selectedItems.ToList();
+        _clipboardCutMode = false;
+        StatusMessage = $"Copied {_clipboardItems.Count} item(s) to clipboard";
+    }
+
+    [RelayCommand]
+    private void CutToClipboard()
+    {
+        if (ActivePanel == null)
+        {
+            return;
+        }
+
+        var selectedItems = ActivePanel.GetSelectedItems();
+        if (selectedItems.Count == 0)
+        {
+            return;
+        }
+
+        _clipboardItems = selectedItems.ToList();
+        _clipboardCutMode = true;
+        StatusMessage = $"Cut {_clipboardItems.Count} item(s) to clipboard";
+    }
+
+    [RelayCommand]
+    private async Task PasteFromClipboardAsync()
+    {
+        if (ActivePanel == null || _clipboardItems.Count == 0)
+        {
+            StatusMessage = "Clipboard is empty";
+            return;
+        }
+
+        if (string.IsNullOrEmpty(ActivePanel.CurrentPath))
+        {
+            StatusMessage = "Cannot paste to root view";
+            return;
+        }
+
+        var destination = ActivePanel.CurrentPath;
+
+        if (_clipboardCutMode)
+        {
+            // Move operation
+            await ExecuteFileOperationAsync(
+                "Moving",
+                _clipboardItems,
+                async (item, progress) =>
+                {
+                    await _fileSystemService.MoveAsync(item.FullPath, destination, true, progress);
+                }
+            );
+            _clipboardItems.Clear();
+            _clipboardCutMode = false;
+        }
+        else
+        {
+            // Copy operation
+            await ExecuteFileOperationAsync(
+                "Pasting",
+                _clipboardItems,
+                async (item, progress) =>
+                {
+                    await _fileSystemService.CopyAsync(item.FullPath, destination, true, progress);
+                }
+            );
+        }
+
+        await ActivePanel.RefreshAsync();
+    }
+
+    [RelayCommand]
+    private void ShowAdvancedSearch()
+    {
+        StatusMessage = "Advanced search dialog would open here";
+        // TODO: Implement advanced search dialog with regex and content search
+    }
+
+    [RelayCommand]
+    private void ShowMassRename()
+    {
+        if (ActivePanel == null)
+        {
+            return;
+        }
+
+        var selectedItems = ActivePanel.GetSelectedItems();
+        if (selectedItems.Count == 0)
+        {
+            StatusMessage = "No files selected for mass rename";
+            return;
+        }
+
+        StatusMessage = $"Mass rename dialog would open for {selectedItems.Count} item(s)";
+        // TODO: Implement mass rename dialog
+    }
+
+    [RelayCommand]
+    private async Task CalculateHashAsync()
+    {
+        if (ActivePanel?.SelectedEntry == null)
+        {
+            StatusMessage = "No file selected";
+            return;
+        }
+
+        if (ActivePanel.SelectedEntry.EntryType != FileSystemEntryType.File)
+        {
+            StatusMessage = "Please select a file to calculate hash";
+            return;
+        }
+
+        try
+        {
+            IsOperationInProgress = true;
+            StatusMessage = "Calculating hashes...";
+
+            var filePath = ActivePanel.SelectedEntry.FullPath;
+            
+            await Task.Run(() =>
+            {
+                // Note: MD5 and SHA1 are included for compatibility and verification purposes
+                // (e.g., verifying downloads, comparing against existing checksums)
+                // For security purposes, SHA256 is recommended
+                using var md5 = System.Security.Cryptography.MD5.Create();
+                using var sha1 = System.Security.Cryptography.SHA1.Create();
+                using var sha256 = System.Security.Cryptography.SHA256.Create();
+                using var stream = File.OpenRead(filePath);
+
+                const int BufferSize = 8192;
+                var buffer = new byte[BufferSize];
+                int bytesRead;
+
+                while ((bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    md5.TransformBlock(buffer, 0, bytesRead, null, 0);
+                    sha1.TransformBlock(buffer, 0, bytesRead, null, 0);
+                    sha256.TransformBlock(buffer, 0, bytesRead, null, 0);
+                }
+
+                md5.TransformFinalBlock(buffer, 0, 0);
+                sha1.TransformFinalBlock(buffer, 0, 0);
+                sha256.TransformFinalBlock(buffer, 0, 0);
+
+                var md5Hash = BitConverter.ToString(md5.Hash!).Replace("-", "");
+                var sha1Hash = BitConverter.ToString(sha1.Hash!).Replace("-", "");
+                var sha256Hash = BitConverter.ToString(sha256.Hash!).Replace("-", "");
+
+                StatusMessage = $"MD5: {md5Hash} | SHA1: {sha1Hash} | SHA256: {sha256Hash}";
+            });
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Error calculating hash: {ex.Message}";
+        }
+        finally
+        {
+            IsOperationInProgress = false;
+        }
     }
 
     private async Task ExecuteFileOperationAsync(
@@ -352,9 +609,22 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
-        LeftPanel.FavoritesChanged -= OnFavoritesChanged;
-        RightPanel.FavoritesChanged -= OnFavoritesChanged;
-        LeftPanel.Dispose();
-        RightPanel.Dispose();
+        // Dispose all tabs
+        foreach (var tab in Tabs)
+        {
+            tab.Dispose();
+        }
+        Tabs.Clear();
+
+        // Note: LeftPanel and RightPanel are now managed by tabs
+        // But we should still unsubscribe from their events if needed
+        if (LeftPanel != null)
+        {
+            LeftPanel.FavoritesChanged -= OnFavoritesChanged;
+        }
+        if (RightPanel != null)
+        {
+            RightPanel.FavoritesChanged -= OnFavoritesChanged;
+        }
     }
 }

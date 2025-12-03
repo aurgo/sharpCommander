@@ -13,11 +13,17 @@ A modern, cross-platform dual-pane file manager built with Avalonia UI. SharpCom
 
 - **🖥️ Cross-Platform**: Runs natively on Windows, Linux, and macOS
 - **📁 Dual-Pane Interface**: Work with two directories side by side
-- **⚡ Fast File Operations**: Copy, move, and delete with progress tracking
+- **🗂️ Tab Support**: Multiple tabs for better workflow organization
+- **⚡ Fast File Operations**: Copy, move, delete with progress tracking
+- **📋 Clipboard Operations**: Full Ctrl+C, Ctrl+X, Ctrl+V support
 - **🔍 Real-Time Updates**: Automatic file system change detection
+- **🔎 Incremental Search**: Type to quickly find files
 - **🎨 Modern Design**: Fluent Design with dark/light theme support
-- **⌨️ Keyboard Shortcuts**: F5 (Copy), F6 (Move), Del (Delete), Ctrl+R (Refresh)
+- **⌨️ Rich Keyboard Shortcuts**: F2-F8, Ctrl+A/C/X/V/R/T/B and more
 - **📊 Detailed Information**: File sizes, types, and modification dates
+- **🔐 Hash Calculation**: MD5, SHA1, SHA256 support
+- **⭐ Favorites**: Quick access to frequently used directories
+- **🖱️ Context Menus**: Right-click for quick actions
 
 ## 🚀 Getting Started
 
@@ -83,12 +89,23 @@ src/
 
 | Shortcut | Action |
 |----------|--------|
+| `F2` | Rename selected file/folder |
+| `F3` | View file |
+| `F4` | Edit file |
 | `F5` | Copy selected files to opposite panel |
 | `F6` | Move selected files to opposite panel |
-| `Del` | Delete selected files |
+| `F7` | Create new folder |
+| `F8` / `Del` | Delete selected files |
+| `Ctrl+A` | Select all files |
+| `Ctrl+C` | Copy to clipboard |
+| `Ctrl+X` | Cut to clipboard |
+| `Ctrl+V` | Paste from clipboard |
 | `Ctrl+R` | Refresh both panels |
+| `Ctrl+T` | New tab |
+| `Ctrl+B` | Toggle favorites panel |
 | `Enter` | Open selected file/folder |
 | `Backspace` | Navigate to parent directory |
+| `Type to search` | Incremental file search |
 
 ## 🎨 Themes
 

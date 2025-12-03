@@ -14,6 +14,10 @@ namespace SharpCommander.Desktop.Views;
 /// </summary>
 public partial class FilePanelView : UserControl
 {
+    private string _incrementalSearchBuffer = string.Empty;
+    private int _lastKeyPressTime;
+    private const int SearchBufferTimeoutMs = 1000; // Reset search buffer after 1 second
+
     public FilePanelView()
     {
         InitializeComponent();
@@ -45,8 +49,64 @@ public partial class FilePanelView : UserControl
                     viewModel.RefreshCommand.Execute(null);
                     e.Handled = true;
                     break;
+                default:
+                    // Handle incremental search (type to navigate)
+                    HandleIncrementalSearch(e, viewModel);
+                    break;
             }
         }
+    }
+
+    private void HandleIncrementalSearch(KeyEventArgs e, FilePanelViewModel viewModel)
+    {
+        // Check if enough time has passed to reset the search buffer
+        var currentTime = Environment.TickCount;
+        if (unchecked(currentTime - _lastKeyPressTime) > SearchBufferTimeoutMs)
+        {
+            _incrementalSearchBuffer = string.Empty;
+        }
+
+        // Handle alphanumeric keys for incremental search
+        if ((e.Key >= Key.A && e.Key <= Key.Z) || 
+            (e.Key >= Key.D0 && e.Key <= Key.D9) ||
+            (e.Key >= Key.NumPad0 && e.Key <= Key.NumPad9))
+        {
+            var keyChar = GetKeyChar(e);
+            if (!string.IsNullOrEmpty(keyChar))
+            {
+                _incrementalSearchBuffer += keyChar;
+                _lastKeyPressTime = currentTime;
+
+                // Find and select the first matching entry
+                var matchingEntry = viewModel.FilteredEntries
+                    .FirstOrDefault(entry => 
+                        entry.Name.StartsWith(_incrementalSearchBuffer, StringComparison.OrdinalIgnoreCase));
+
+                if (matchingEntry != null)
+                {
+                    viewModel.SelectedEntry = matchingEntry;
+                    e.Handled = true;
+                }
+            }
+        }
+    }
+
+    private string GetKeyChar(KeyEventArgs e)
+    {
+        // Convert key to character
+        if (e.Key >= Key.A && e.Key <= Key.Z)
+        {
+            return ((char)('a' + (e.Key - Key.A))).ToString();
+        }
+        else if (e.Key >= Key.D0 && e.Key <= Key.D9)
+        {
+            return ((char)('0' + (e.Key - Key.D0))).ToString();
+        }
+        else if (e.Key >= Key.NumPad0 && e.Key <= Key.NumPad9)
+        {
+            return ((char)('0' + (e.Key - Key.NumPad0))).ToString();
+        }
+        return string.Empty;
     }
 }
 
