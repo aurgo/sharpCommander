@@ -15,7 +15,7 @@ namespace SharpCommander.Desktop.Views;
 public partial class FilePanelView : UserControl
 {
     private string _incrementalSearchBuffer = string.Empty;
-    private DateTime _lastKeyPress = DateTime.MinValue;
+    private int _lastKeyPressTime;
     private const int SearchBufferTimeoutMs = 1000; // Reset search buffer after 1 second
 
     public FilePanelView()
@@ -60,7 +60,8 @@ public partial class FilePanelView : UserControl
     private void HandleIncrementalSearch(KeyEventArgs e, FilePanelViewModel viewModel)
     {
         // Check if enough time has passed to reset the search buffer
-        if ((DateTime.Now - _lastKeyPress).TotalMilliseconds > SearchBufferTimeoutMs)
+        var currentTime = Environment.TickCount;
+        if (unchecked(currentTime - _lastKeyPressTime) > SearchBufferTimeoutMs)
         {
             _incrementalSearchBuffer = string.Empty;
         }
@@ -74,7 +75,7 @@ public partial class FilePanelView : UserControl
             if (!string.IsNullOrEmpty(keyChar))
             {
                 _incrementalSearchBuffer += keyChar;
-                _lastKeyPress = DateTime.Now;
+                _lastKeyPressTime = currentTime;
 
                 // Find and select the first matching entry
                 var matchingEntry = viewModel.FilteredEntries

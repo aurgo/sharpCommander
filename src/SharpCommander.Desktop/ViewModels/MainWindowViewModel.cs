@@ -523,12 +523,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             
             await Task.Run(() =>
             {
+                // Note: MD5 and SHA1 are included for compatibility and verification purposes
+                // (e.g., verifying downloads, comparing against existing checksums)
+                // For security purposes, SHA256 is recommended
                 using var md5 = System.Security.Cryptography.MD5.Create();
                 using var sha1 = System.Security.Cryptography.SHA1.Create();
                 using var sha256 = System.Security.Cryptography.SHA256.Create();
                 using var stream = File.OpenRead(filePath);
 
-                var buffer = new byte[8192];
+                const int BufferSize = 8192;
+                var buffer = new byte[BufferSize];
                 int bytesRead;
 
                 while ((bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
