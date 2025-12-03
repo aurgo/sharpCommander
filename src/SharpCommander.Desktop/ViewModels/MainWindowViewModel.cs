@@ -521,7 +521,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
             var filePath = ActivePanel.SelectedEntry.FullPath;
             
-            await Task.Run(async () =>
+            await Task.Run(() =>
             {
                 using var md5 = System.Security.Cryptography.MD5.Create();
                 using var sha1 = System.Security.Cryptography.SHA1.Create();
@@ -531,7 +531,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 var buffer = new byte[8192];
                 int bytesRead;
 
-                while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                while ((bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
                 {
                     md5.TransformBlock(buffer, 0, bytesRead, null, 0);
                     sha1.TransformBlock(buffer, 0, bytesRead, null, 0);

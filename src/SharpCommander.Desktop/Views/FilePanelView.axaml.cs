@@ -66,9 +66,9 @@ public partial class FilePanelView : UserControl
         }
 
         // Handle alphanumeric keys for incremental search
-        if (e.Key >= Key.A && e.Key <= Key.Z || 
-            e.Key >= Key.D0 && e.Key <= Key.D9 ||
-            e.Key >= Key.NumPad0 && e.Key <= Key.NumPad9)
+        if ((e.Key >= Key.A && e.Key <= Key.Z) || 
+            (e.Key >= Key.D0 && e.Key <= Key.D9) ||
+            (e.Key >= Key.NumPad0 && e.Key <= Key.NumPad9))
         {
             var keyChar = GetKeyChar(e);
             if (!string.IsNullOrEmpty(keyChar))
