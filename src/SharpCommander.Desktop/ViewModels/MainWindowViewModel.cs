@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SharpCommander.Core.Interfaces;
@@ -12,6 +13,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 {
     private readonly IFileSystemService _fileSystemService;
     private readonly ISettingsService _settingsService;
+
+    [ObservableProperty]
+    private ObservableCollection<TabViewModel> _tabs = [];
+
+    [ObservableProperty]
+    private TabViewModel? _currentTab;
 
     [ObservableProperty]
     private FilePanelViewModel _leftPanel;
@@ -59,6 +66,22 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         // Subscribe to favorites changes to sync both panels
         _leftPanel.FavoritesChanged += OnFavoritesChanged;
         _rightPanel.FavoritesChanged += OnFavoritesChanged;
+
+        // Initialize with a default tab
+        var defaultTab = new TabViewModel(fileSystemService, settingsService);
+        Tabs.Add(defaultTab);
+        CurrentTab = defaultTab;
+    }
+
+    partial void OnCurrentTabChanged(TabViewModel? value)
+    {
+        if (value != null)
+        {
+            // Update the main panels when tab changes
+            LeftPanel = value.LeftPanel;
+            RightPanel = value.RightPanel;
+            ActivePanel = value.ActivePanel;
+        }
     }
 
     private void OnFavoritesChanged(object? sender, EventArgs e)
@@ -82,11 +105,14 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         var leftPath = _settingsService.Settings.LastLeftPanelPath ?? _fileSystemService.GetDefaultDirectory();
         var rightPath = _settingsService.Settings.LastRightPanelPath ?? _fileSystemService.GetDefaultDirectory();
         
-        // Now initialize panels - this will load favorites and history from already-loaded settings
-        await Task.WhenAll(
-            LeftPanel.InitializeAsync(leftPath),
-            RightPanel.InitializeAsync(rightPath)
-        );
+        // Initialize the default tab
+        if (CurrentTab != null)
+        {
+            await CurrentTab.InitializeAsync(leftPath, rightPath);
+            LeftPanel = CurrentTab.LeftPanel;
+            RightPanel = CurrentTab.RightPanel;
+            ActivePanel = CurrentTab.ActivePanel;
+        }
     }
 
     public async Task SaveStateAsync()
@@ -302,6 +328,38 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             LeftPanel.NavigateToCommand.ExecuteAsync(rightPath),
             RightPanel.NavigateToCommand.ExecuteAsync(leftPath)
         );
+    }
+
+    [RelayCommand]
+    private async Task NewTabAsync()
+    {
+        var newTab = new TabViewModel(_fileSystemService, _settingsService);
+        await newTab.InitializeAsync();
+        Tabs.Add(newTab);
+        CurrentTab = newTab;
+        StatusMessage = "New tab created";
+    }
+
+    [RelayCommand]
+    private void CloseTab(TabViewModel? tab)
+    {
+        if (tab == null || Tabs.Count <= 1)
+        {
+            StatusMessage = "Cannot close the last tab";
+            return;
+        }
+
+        var index = Tabs.IndexOf(tab);
+        tab.Dispose();
+        Tabs.Remove(tab);
+
+        // Select the previous tab or the first tab
+        if (CurrentTab == tab)
+        {
+            CurrentTab = index > 0 ? Tabs[index - 1] : Tabs[0];
+        }
+
+        StatusMessage = "Tab closed";
     }
 
     [RelayCommand]
@@ -547,9 +605,22 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
-        LeftPanel.FavoritesChanged -= OnFavoritesChanged;
-        RightPanel.FavoritesChanged -= OnFavoritesChanged;
-        LeftPanel.Dispose();
-        RightPanel.Dispose();
+        // Dispose all tabs
+        foreach (var tab in Tabs)
+        {
+            tab.Dispose();
+        }
+        Tabs.Clear();
+
+        // Note: LeftPanel and RightPanel are now managed by tabs
+        // But we should still unsubscribe from their events if needed
+        if (LeftPanel != null)
+        {
+            LeftPanel.FavoritesChanged -= OnFavoritesChanged;
+        }
+        if (RightPanel != null)
+        {
+            RightPanel.FavoritesChanged -= OnFavoritesChanged;
+        }
     }
 }
