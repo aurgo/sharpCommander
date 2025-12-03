@@ -415,6 +415,92 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         await ActivePanel.RefreshAsync();
     }
 
+    [RelayCommand]
+    private void ShowAdvancedSearch()
+    {
+        StatusMessage = "Advanced search dialog would open here";
+        // TODO: Implement advanced search dialog with regex and content search
+    }
+
+    [RelayCommand]
+    private void ShowMassRename()
+    {
+        if (ActivePanel == null)
+        {
+            return;
+        }
+
+        var selectedItems = ActivePanel.GetSelectedItems();
+        if (selectedItems.Count == 0)
+        {
+            StatusMessage = "No files selected for mass rename";
+            return;
+        }
+
+        StatusMessage = $"Mass rename dialog would open for {selectedItems.Count} item(s)";
+        // TODO: Implement mass rename dialog
+    }
+
+    [RelayCommand]
+    private async Task CalculateHashAsync()
+    {
+        if (ActivePanel?.SelectedEntry == null)
+        {
+            StatusMessage = "No file selected";
+            return;
+        }
+
+        if (ActivePanel.SelectedEntry.EntryType != FileSystemEntryType.File)
+        {
+            StatusMessage = "Please select a file to calculate hash";
+            return;
+        }
+
+        try
+        {
+            IsOperationInProgress = true;
+            StatusMessage = "Calculating hashes...";
+
+            var filePath = ActivePanel.SelectedEntry.FullPath;
+            
+            await Task.Run(async () =>
+            {
+                using var md5 = System.Security.Cryptography.MD5.Create();
+                using var sha1 = System.Security.Cryptography.SHA1.Create();
+                using var sha256 = System.Security.Cryptography.SHA256.Create();
+                using var stream = File.OpenRead(filePath);
+
+                var buffer = new byte[8192];
+                int bytesRead;
+
+                while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                {
+                    md5.TransformBlock(buffer, 0, bytesRead, null, 0);
+                    sha1.TransformBlock(buffer, 0, bytesRead, null, 0);
+                    sha256.TransformBlock(buffer, 0, bytesRead, null, 0);
+                }
+
+                md5.TransformFinalBlock(buffer, 0, 0);
+                sha1.TransformFinalBlock(buffer, 0, 0);
+                sha256.TransformFinalBlock(buffer, 0, 0);
+
+                var md5Hash = BitConverter.ToString(md5.Hash!).Replace("-", "");
+                var sha1Hash = BitConverter.ToString(sha1.Hash!).Replace("-", "");
+                var sha256Hash = BitConverter.ToString(sha256.Hash!).Replace("-", "");
+
+                StatusMessage = $"MD5: {md5Hash} | SHA1: {sha1Hash} | SHA256: {sha256Hash}";
+            });
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Error calculating hash: {ex.Message}";
+        }
+        finally
+        {
+            IsOperationInProgress = false;
+        }
+    }
+
     private async Task ExecuteFileOperationAsync(
         string operationName,
         IReadOnlyList<FileSystemEntry> items,
