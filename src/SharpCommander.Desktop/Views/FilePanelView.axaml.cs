@@ -37,6 +37,27 @@ public partial class FilePanelView : UserControl
         }
     }
 
+    private void ListBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (DataContext is not FilePanelViewModel viewModel || sender is not ListBox listBox)
+        {
+            return;
+        }
+
+        // Sync selected items to ViewModel
+        viewModel.SelectedEntries.Clear();
+        if (listBox.SelectedItems != null)
+        {
+            foreach (var item in listBox.SelectedItems)
+            {
+                if (item is FileSystemEntry entry)
+                {
+                    viewModel.SelectedEntries.Add(entry);
+                }
+            }
+        }
+    }
+
     private void ListBox_KeyDown(object? sender, KeyEventArgs e)
     {
         if (DataContext is FilePanelViewModel viewModel)

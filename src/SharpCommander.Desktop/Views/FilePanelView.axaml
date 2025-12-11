@@ -145,11 +145,13 @@
             <!-- File List -->
             <ListBox ItemsSource="{Binding FilteredEntries}"
                      SelectedItem="{Binding SelectedEntry}"
+                     SelectedItems="{Binding SelectedEntries}"
                      SelectionMode="Multiple"
                      DoubleTapped="ListBox_DoubleTapped"
                      KeyDown="ListBox_KeyDown"
                      PointerPressed="ListBox_PointerPressed"
                      PointerMoved="ListBox_PointerMoved"
+                     SelectionChanged="ListBox_SelectionChanged"
                      DragDrop.AllowDrop="True">
                 <ListBox.ContextMenu>
                     <ContextMenu>
