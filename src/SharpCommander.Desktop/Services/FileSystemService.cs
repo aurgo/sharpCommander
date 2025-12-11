@@ -395,7 +395,11 @@ public sealed class FileSystemService : IFileSystemService
                     throw new PlatformNotSupportedException("Opening file explorer is not supported on this platform.");
                 }
 
-                Process.Start(startInfo);
+                using var process = Process.Start(startInfo);
+                if (process == null)
+                {
+                    throw new InvalidOperationException("Failed to start file explorer process.");
+                }
             }
             catch (Exception ex)
             {
@@ -413,7 +417,7 @@ public sealed class FileSystemService : IFileSystemService
         {
             try
             {
-                var which = Process.Start(new ProcessStartInfo
+                using var which = Process.Start(new ProcessStartInfo
                 {
                     FileName = "which",
                     Arguments = fm,
@@ -424,8 +428,8 @@ public sealed class FileSystemService : IFileSystemService
                 
                 if (which != null)
                 {
-                    which.WaitForExit();
-                    if (which.ExitCode == 0)
+                    // Wait up to 1 second for the which command to complete
+                    if (which.WaitForExit(1000) && which.ExitCode == 0)
                     {
                         return fm;
                     }

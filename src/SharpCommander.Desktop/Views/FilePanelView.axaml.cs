@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Data.Converters;
@@ -197,72 +198,24 @@ public partial class FilePanelView : UserControl
         }
     }
 
-    private async void ListBox_Drop(object? sender, DragEventArgs e)
+    private void ListBox_Drop(object? sender, DragEventArgs e)
     {
         if (DataContext is not FilePanelViewModel viewModel)
         {
             return;
         }
 
-        if (!e.Data.Contains(DataFormats.Files))
+        // Accept files dropped from external sources (e.g., Windows Explorer)
+        if (e.Data.Contains(DataFormats.Files))
         {
-            return;
-        }
-
-        var files = e.Data.GetFiles();
-        if (files == null)
-        {
-            return;
-        }
-
-        var filePaths = files.Select(f => f.Path.LocalPath).ToList();
-        
-        // Determine the target directory
-        string targetDirectory;
-        
-        // Try to get the item under the cursor
-        if (sender is ListBox listBox)
-        {
-            var position = e.GetPosition(listBox);
-            var hitTest = listBox.InputHitTest(position);
-            
-            // If dropped on an item, check if it's a directory
-            if (hitTest is Visual visual)
+            var files = e.Data.GetFiles();
+            if (files != null)
             {
-                var item = visual.FindAncestorOfType<ListBoxItem>();
-                if (item?.DataContext is FileSystemEntry entry && 
-                    entry.EntryType == FileSystemEntryType.Directory)
-                {
-                    targetDirectory = entry.FullPath;
-                }
-                else
-                {
-                    targetDirectory = viewModel.CurrentPath;
-                }
+                var fileCount = files.Count();
+                viewModel.StatusText = $"Dropped {fileCount} item(s). Use Ctrl+C/V or F5/F6 to copy/move files between panels.";
             }
-            else
-            {
-                targetDirectory = viewModel.CurrentPath;
-            }
+            e.Handled = true;
         }
-        else
-        {
-            targetDirectory = viewModel.CurrentPath;
-        }
-
-        if (string.IsNullOrEmpty(targetDirectory))
-        {
-            return;
-        }
-
-        // Perform the operation based on drag effect
-        var isMove = e.DragEffects == DragDropEffects.Move;
-        
-        // Notify that we're handling this via the MainWindowViewModel
-        // We'll raise an event or call a method to handle this
-        viewModel.StatusText = isMove 
-            ? $"Moving {filePaths.Count} item(s)..." 
-            : $"Copying {filePaths.Count} item(s)...";
     }
 }
 
