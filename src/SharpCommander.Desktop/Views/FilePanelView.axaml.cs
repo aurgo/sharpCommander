@@ -1,8 +1,10 @@
 using System.Globalization;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Data.Converters;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using SharpCommander.Core.Models;
 using SharpCommander.Desktop.Utilities;
 using SharpCommander.Desktop.ViewModels;
@@ -17,10 +19,14 @@ public partial class FilePanelView : UserControl
     private string _incrementalSearchBuffer = string.Empty;
     private int _lastKeyPressTime;
     private const int SearchBufferTimeoutMs = 1000; // Reset search buffer after 1 second
+    private Point? _dragStartPoint;
+    private bool _isDragging;
 
     public FilePanelView()
     {
         InitializeComponent();
+        AddHandler(DragDrop.DropEvent, ListBox_Drop);
+        AddHandler(DragDrop.DragOverEvent, ListBox_DragOver);
     }
 
     private void ListBox_DoubleTapped(object? sender, TappedEventArgs e)
@@ -48,6 +54,10 @@ public partial class FilePanelView : UserControl
                 case Key.F5:
                     viewModel.RefreshCommand.Execute(null);
                     e.Handled = true;
+                    break;
+                case Key.Delete:
+                    // Don't handle Delete here - let it bubble up to MainWindow
+                    // so the DeleteCommand can be executed
                     break;
                 default:
                     // Handle incremental search (type to navigate)
@@ -107,6 +117,131 @@ public partial class FilePanelView : UserControl
             return ((char)('0' + (e.Key - Key.NumPad0))).ToString();
         }
         return string.Empty;
+    }
+
+    private void ListBox_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            _dragStartPoint = e.GetPosition(this);
+            _isDragging = false;
+        }
+    }
+
+    private async void ListBox_PointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_dragStartPoint.HasValue && 
+            e.GetCurrentPoint(this).Properties.IsLeftButtonPressed && 
+            !_isDragging &&
+            DataContext is FilePanelViewModel viewModel)
+        {
+            var currentPoint = e.GetPosition(this);
+            var diff = _dragStartPoint.Value - currentPoint;
+            
+            // Check if the pointer has moved enough to start dragging
+            if (Math.Abs(diff.X) > 3 || Math.Abs(diff.Y) > 3)
+            {
+                var selectedItems = viewModel.GetSelectedItems();
+                if (selectedItems.Count > 0)
+                {
+                    _isDragging = true;
+                    
+                    // Create data object with file paths
+                    var dataObject = new DataObject();
+                    var files = selectedItems.Select(item => item.FullPath).ToArray();
+                    dataObject.Set(DataFormats.Files, files);
+                    
+                    // Start drag operation
+                    await DragDrop.DoDragDrop(e, dataObject, DragDropEffects.Copy | DragDropEffects.Move);
+                    
+                    _dragStartPoint = null;
+                    _isDragging = false;
+                }
+            }
+        }
+    }
+
+    private void ListBox_DragOver(object? sender, DragEventArgs e)
+    {
+        // Only allow file drops
+        if (e.Data.Contains(DataFormats.Files))
+        {
+            e.DragEffects = e.KeyModifiers.HasFlag(KeyModifiers.Control) 
+                ? DragDropEffects.Copy 
+                : DragDropEffects.Move;
+        }
+        else
+        {
+            e.DragEffects = DragDropEffects.None;
+        }
+    }
+
+    private async void ListBox_Drop(object? sender, DragEventArgs e)
+    {
+        if (DataContext is not FilePanelViewModel viewModel)
+        {
+            return;
+        }
+
+        if (!e.Data.Contains(DataFormats.Files))
+        {
+            return;
+        }
+
+        var files = e.Data.GetFiles();
+        if (files == null)
+        {
+            return;
+        }
+
+        var filePaths = files.Select(f => f.Path.LocalPath).ToList();
+        
+        // Determine the target directory
+        string targetDirectory;
+        
+        // Try to get the item under the cursor
+        if (sender is ListBox listBox)
+        {
+            var position = e.GetPosition(listBox);
+            var hitTest = listBox.InputHitTest(position);
+            
+            // If dropped on an item, check if it's a directory
+            if (hitTest is Visual visual)
+            {
+                var item = visual.FindAncestorOfType<ListBoxItem>();
+                if (item?.DataContext is FileSystemEntry entry && 
+                    entry.EntryType == FileSystemEntryType.Directory)
+                {
+                    targetDirectory = entry.FullPath;
+                }
+                else
+                {
+                    targetDirectory = viewModel.CurrentPath;
+                }
+            }
+            else
+            {
+                targetDirectory = viewModel.CurrentPath;
+            }
+        }
+        else
+        {
+            targetDirectory = viewModel.CurrentPath;
+        }
+
+        if (string.IsNullOrEmpty(targetDirectory))
+        {
+            return;
+        }
+
+        // Perform the operation based on drag effect
+        var isMove = e.DragEffects == DragDropEffects.Move;
+        
+        // Notify that we're handling this via the MainWindowViewModel
+        // We'll raise an event or call a method to handle this
+        viewModel.StatusText = isMove 
+            ? $"Moving {filePaths.Count} item(s)..." 
+            : $"Copying {filePaths.Count} item(s)...";
     }
 }
 

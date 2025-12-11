@@ -66,6 +66,13 @@
                             <PathIcon Data="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11H4Z" 
                                       Width="14" Height="14" />
                         </Button>
+                        <Button Command="{Binding OpenInFileExplorerCommand}"
+                                IsEnabled="{Binding !IsRootView}"
+                                Padding="6,4"
+                                ToolTip.Tip="Open in File Explorer/Finder">
+                            <PathIcon Data="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z" 
+                                      Width="14" Height="14" />
+                        </Button>
                         <Button Command="{Binding ToggleFavoriteCommand}"
                                 IsEnabled="{Binding !IsRootView}"
                                 Padding="6,4"
@@ -95,7 +102,7 @@
                         </Button>
                         <Button Command="{Binding RefreshCommand}"
                                 Padding="6,4"
-                                ToolTip.Tip="Refresh (Ctrl+R)">
+                                ToolTip.Tip="Refresh (F5, Ctrl+R)">
                             <PathIcon Data="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 0 0-8 8 8 8 0 0 0 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18a6 6 0 0 1-6-6 6 6 0 0 1 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35Z" 
                                       Width="14" Height="14" />
                         </Button>
@@ -140,12 +147,20 @@
                      SelectedItem="{Binding SelectedEntry}"
                      SelectionMode="Multiple"
                      DoubleTapped="ListBox_DoubleTapped"
-                     KeyDown="ListBox_KeyDown">
+                     KeyDown="ListBox_KeyDown"
+                     PointerPressed="ListBox_PointerPressed"
+                     PointerMoved="ListBox_PointerMoved"
+                     DragDrop.AllowDrop="True">
                 <ListBox.ContextMenu>
                     <ContextMenu>
                         <MenuItem Header="Open" Command="{Binding OpenSelectedCommand}">
                             <MenuItem.Icon>
                                 <PathIcon Data="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z" Width="16" Height="16" />
+                            </MenuItem.Icon>
+                        </MenuItem>
+                        <MenuItem Header="Open in File Explorer" Command="{Binding OpenInFileExplorerCommand}">
+                            <MenuItem.Icon>
+                                <PathIcon Data="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2Z" Width="16" Height="16" />
                             </MenuItem.Icon>
                         </MenuItem>
                         <Separator />
@@ -155,7 +170,7 @@
                             </MenuItem.Icon>
                         </MenuItem>
                         <Separator />
-                        <MenuItem Header="Refresh" Command="{Binding RefreshCommand}">
+                        <MenuItem Header="Refresh (F5)" Command="{Binding RefreshCommand}">
                             <MenuItem.Icon>
                                 <PathIcon Data="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 0 0-8 8 8 8 0 0 0 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18a6 6 0 0 1-6-6 6 6 0 0 1 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35Z" Width="16" Height="16" />
                             </MenuItem.Icon>

@@ -283,6 +283,24 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
+    private async Task OpenInFileExplorerAsync()
+    {
+        if (string.IsNullOrEmpty(CurrentPath))
+        {
+            return;
+        }
+
+        try
+        {
+            await _fileSystemService.OpenInFileExplorerAsync(CurrentPath);
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Error opening file explorer: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
     private void ToggleSearch()
     {
         IsSearchActive = !IsSearchActive;

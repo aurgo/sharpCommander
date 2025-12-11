@@ -61,4 +61,9 @@ public interface IFileSystemService
     /// Gets the default starting directory.
     /// </summary>
     string GetDefaultDirectory();
+    
+    /// <summary>
+    /// Opens the specified path in the system file explorer.
+    /// </summary>
+    Task OpenInFileExplorerAsync(string path, CancellationToken cancellationToken = default);
 }
