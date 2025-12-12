@@ -273,12 +273,16 @@
                                FontWeight="SemiBold" 
                                Margin="8"
                                Foreground="{DynamicResource SystemAccentColor}" />
-                    <ListBox ItemsSource="{Binding LeftPanel.Favorites}"
+                    <ListBox x:Name="FavoritesListBox"
+                             ItemsSource="{Binding LeftPanel.Favorites}"
                              Background="Transparent"
-                             SelectionChanged="Favorites_SelectionChanged">
+                             SelectionChanged="Favorites_SelectionChanged"
+                             DragDrop.AllowDrop="True">
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="models:FavoriteItem">
-                                <StackPanel Orientation="Horizontal" Spacing="8" Margin="4,2">
+                                <StackPanel Orientation="Horizontal" Spacing="8" Margin="4,2"
+                                           PointerPressed="FavoriteItem_PointerPressed"
+                                           PointerMoved="FavoriteItem_PointerMoved">
                                     <PathIcon Width="16" Height="16"
                                               Data="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2Z"
                                               Foreground="{DynamicResource SystemAccentColor}" />

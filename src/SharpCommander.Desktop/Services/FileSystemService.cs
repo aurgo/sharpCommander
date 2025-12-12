@@ -297,4 +297,151 @@ public sealed class FileSystemService : IFileSystemService
     {
         return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     }
+
+    public async Task OpenInFileExplorerAsync(string path, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+
+        // Ensure the path exists
+        if (!File.Exists(path) && !Directory.Exists(path))
+        {
+            throw new FileNotFoundException("The specified path does not exist.", path);
+        }
+
+        await Task.Run(() =>
+        {
+            try
+            {
+                ProcessStartInfo startInfo;
+                
+                // Determine if path is a file or directory
+                var isDirectory = Directory.Exists(path);
+                
+                if (OperatingSystem.IsWindows())
+                {
+                    // On Windows, use explorer.exe
+                    if (isDirectory)
+                    {
+                        // Open the directory
+                        startInfo = new ProcessStartInfo
+                        {
+                            FileName = "explorer.exe",
+                            Arguments = $"\"{path}\"",
+                            UseShellExecute = false
+                        };
+                    }
+                    else
+                    {
+                        // Select the file in explorer
+                        startInfo = new ProcessStartInfo
+                        {
+                            FileName = "explorer.exe",
+                            Arguments = $"/select,\"{path}\"",
+                            UseShellExecute = false
+                        };
+                    }
+                }
+                else if (OperatingSystem.IsMacOS())
+                {
+                    // On macOS, use open command
+                    if (isDirectory)
+                    {
+                        startInfo = new ProcessStartInfo
+                        {
+                            FileName = "open",
+                            Arguments = $"\"{path}\"",
+                            UseShellExecute = false
+                        };
+                    }
+                    else
+                    {
+                        // Reveal in Finder
+                        startInfo = new ProcessStartInfo
+                        {
+                            FileName = "open",
+                            Arguments = $"-R \"{path}\"",
+                            UseShellExecute = false
+                        };
+                    }
+                }
+                else if (OperatingSystem.IsLinux())
+                {
+                    // On Linux, try common file managers
+                    var fileManager = FindLinuxFileManager();
+                    
+                    if (isDirectory)
+                    {
+                        startInfo = new ProcessStartInfo
+                        {
+                            FileName = fileManager,
+                            Arguments = $"\"{path}\"",
+                            UseShellExecute = false
+                        };
+                    }
+                    else
+                    {
+                        // Open the parent directory (most Linux file managers don't support select)
+                        var directory = Path.GetDirectoryName(path) ?? path;
+                        startInfo = new ProcessStartInfo
+                        {
+                            FileName = fileManager,
+                            Arguments = $"\"{directory}\"",
+                            UseShellExecute = false
+                        };
+                    }
+                }
+                else
+                {
+                    throw new PlatformNotSupportedException("Opening file explorer is not supported on this platform.");
+                }
+
+                using var process = Process.Start(startInfo);
+                if (process == null)
+                {
+                    throw new InvalidOperationException("Failed to start file explorer process.");
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Failed to open file explorer: {ex.Message}", ex);
+            }
+        }, cancellationToken);
+    }
+
+    private static string FindLinuxFileManager()
+    {
+        // Try to find a file manager in order of preference
+        var fileManagers = new[] { "nautilus", "dolphin", "thunar", "nemo", "caja", "pcmanfm", "xdg-open" };
+        
+        foreach (var fm in fileManagers)
+        {
+            try
+            {
+                using var which = Process.Start(new ProcessStartInfo
+                {
+                    FileName = "which",
+                    Arguments = fm,
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                });
+                
+                if (which != null)
+                {
+                    // Wait up to 1 second for the which command to complete
+                    if (which.WaitForExit(1000) && which.ExitCode == 0)
+                    {
+                        return fm;
+                    }
+                }
+            }
+            catch
+            {
+                // Continue to next file manager
+            }
+        }
+        
+        // Fallback to xdg-open which should be available on most Linux systems
+        return "xdg-open";
+    }
 }

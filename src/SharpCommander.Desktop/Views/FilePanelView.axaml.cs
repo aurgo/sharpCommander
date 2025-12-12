@@ -1,8 +1,11 @@
 using System.Globalization;
+using System.Linq;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Data.Converters;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using SharpCommander.Core.Models;
 using SharpCommander.Desktop.Utilities;
 using SharpCommander.Desktop.ViewModels;
@@ -17,10 +20,14 @@ public partial class FilePanelView : UserControl
     private string _incrementalSearchBuffer = string.Empty;
     private int _lastKeyPressTime;
     private const int SearchBufferTimeoutMs = 1000; // Reset search buffer after 1 second
+    private Point? _dragStartPoint;
+    private bool _isDragging;
 
     public FilePanelView()
     {
         InitializeComponent();
+        AddHandler(DragDrop.DropEvent, ListBox_Drop);
+        AddHandler(DragDrop.DragOverEvent, ListBox_DragOver);
     }
 
     private void ListBox_DoubleTapped(object? sender, TappedEventArgs e)
@@ -28,6 +35,27 @@ public partial class FilePanelView : UserControl
         if (DataContext is FilePanelViewModel viewModel)
         {
             viewModel.OpenSelectedCommand.Execute(null);
+        }
+    }
+
+    private void ListBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (DataContext is not FilePanelViewModel viewModel || sender is not ListBox listBox)
+        {
+            return;
+        }
+
+        // Sync selected items to ViewModel
+        viewModel.SelectedEntries.Clear();
+        if (listBox.SelectedItems != null)
+        {
+            foreach (var item in listBox.SelectedItems)
+            {
+                if (item is FileSystemEntry entry)
+                {
+                    viewModel.SelectedEntries.Add(entry);
+                }
+            }
         }
     }
 
@@ -48,6 +76,10 @@ public partial class FilePanelView : UserControl
                 case Key.F5:
                     viewModel.RefreshCommand.Execute(null);
                     e.Handled = true;
+                    break;
+                case Key.Delete:
+                    // Don't handle Delete here - let it bubble up to MainWindow
+                    // so the DeleteCommand can be executed
                     break;
                 default:
                     // Handle incremental search (type to navigate)
@@ -107,6 +139,83 @@ public partial class FilePanelView : UserControl
             return ((char)('0' + (e.Key - Key.NumPad0))).ToString();
         }
         return string.Empty;
+    }
+
+    private void ListBox_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            _dragStartPoint = e.GetPosition(this);
+            _isDragging = false;
+        }
+    }
+
+    private async void ListBox_PointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_dragStartPoint.HasValue && 
+            e.GetCurrentPoint(this).Properties.IsLeftButtonPressed && 
+            !_isDragging &&
+            DataContext is FilePanelViewModel viewModel)
+        {
+            var currentPoint = e.GetPosition(this);
+            var diff = _dragStartPoint.Value - currentPoint;
+            
+            // Check if the pointer has moved enough to start dragging
+            if (Math.Abs(diff.X) > 3 || Math.Abs(diff.Y) > 3)
+            {
+                var selectedItems = viewModel.GetSelectedItems();
+                if (selectedItems.Count > 0)
+                {
+                    _isDragging = true;
+                    
+                    // Create data object with file paths
+                    var dataObject = new DataObject();
+                    var files = selectedItems.Select(item => item.FullPath).ToArray();
+                    dataObject.Set(DataFormats.Files, files);
+                    
+                    // Start drag operation
+                    await DragDrop.DoDragDrop(e, dataObject, DragDropEffects.Copy | DragDropEffects.Move);
+                    
+                    _dragStartPoint = null;
+                    _isDragging = false;
+                }
+            }
+        }
+    }
+
+    private void ListBox_DragOver(object? sender, DragEventArgs e)
+    {
+        // Only allow file drops
+        if (e.Data.Contains(DataFormats.Files))
+        {
+            e.DragEffects = e.KeyModifiers.HasFlag(KeyModifiers.Control) 
+                ? DragDropEffects.Copy 
+                : DragDropEffects.Move;
+        }
+        else
+        {
+            e.DragEffects = DragDropEffects.None;
+        }
+    }
+
+    private void ListBox_Drop(object? sender, DragEventArgs e)
+    {
+        if (DataContext is not FilePanelViewModel viewModel)
+        {
+            return;
+        }
+
+        // Accept files dropped from external sources (e.g., Windows Explorer)
+        if (e.Data.Contains(DataFormats.Files))
+        {
+            var files = e.Data.GetFiles();
+            if (files != null)
+            {
+                var fileCount = files.Count();
+                viewModel.StatusText = $"Dropped {fileCount} item(s). Use Ctrl+C/V or F5/F6 to copy/move files between panels.";
+            }
+            e.Handled = true;
+        }
     }
 }
 
