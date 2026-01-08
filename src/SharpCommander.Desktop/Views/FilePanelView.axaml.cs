@@ -98,6 +98,12 @@ public partial class FilePanelView : UserControl
             _incrementalSearchBuffer = string.Empty;
         }
 
+        // Ignore keys with modifiers (Ctrl, Alt, Meta) - except Shift
+        if (e.KeyModifiers != KeyModifiers.None && e.KeyModifiers != KeyModifiers.Shift)
+        {
+            return;
+        }
+
         // Handle alphanumeric keys for incremental search
         if ((e.Key >= Key.A && e.Key <= Key.Z) || 
             (e.Key >= Key.D0 && e.Key <= Key.D9) ||
@@ -106,6 +112,9 @@ public partial class FilePanelView : UserControl
             var keyChar = GetKeyChar(e);
             if (!string.IsNullOrEmpty(keyChar))
             {
+                // Always mark as handled to prevent bubbling up to menu or other controls
+                e.Handled = true;
+
                 _incrementalSearchBuffer += keyChar;
                 _lastKeyPressTime = currentTime;
 
@@ -117,7 +126,6 @@ public partial class FilePanelView : UserControl
                 if (matchingEntry != null)
                 {
                     viewModel.SelectedEntry = matchingEntry;
-                    e.Handled = true;
                 }
             }
         }
