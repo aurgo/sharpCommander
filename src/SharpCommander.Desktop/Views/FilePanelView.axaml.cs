@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Data.Converters;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using SharpCommander.Core.Models;
 using SharpCommander.Desktop.Utilities;
@@ -22,12 +23,76 @@ public partial class FilePanelView : UserControl
     private const int SearchBufferTimeoutMs = 1000; // Reset search buffer after 1 second
     private Point? _dragStartPoint;
     private bool _isDragging;
+    private FilePanelViewModel? _subscribedViewModel;
 
     public FilePanelView()
     {
         InitializeComponent();
         AddHandler(DragDrop.DropEvent, ListBox_Drop);
         AddHandler(DragDrop.DragOverEvent, ListBox_DragOver);
+        
+        DataContextChanged += OnDataContextChanged;
+    }
+
+    private void OnDataContextChanged(object? sender, EventArgs e)
+    {
+        // Unsubscribe from previous ViewModel to avoid accumulating handlers
+        if (_subscribedViewModel != null)
+        {
+            _subscribedViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _subscribedViewModel = null;
+        }
+
+        if (DataContext is FilePanelViewModel viewModel)
+        {
+            _subscribedViewModel = viewModel;
+            viewModel.PropertyChanged += OnViewModelPropertyChanged;
+            SyncSelectionToUI(viewModel);
+        }
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(FilePanelViewModel.FilteredEntries) &&
+            DataContext is FilePanelViewModel viewModel)
+        {
+            SyncSelectionToUI(viewModel);
+        }
+    }
+
+    private void SyncSelectionToUI(FilePanelViewModel viewModel)
+    {
+        if (this.FindControl<ListBox>("FileListBox") is not ListBox listBox) return;
+        
+        _isUpdatingSelectionFromCode = true;
+        try
+        {
+            listBox.SelectedItems?.Clear();
+            foreach (var item in viewModel.SelectedEntries)
+            {
+                listBox.SelectedItems?.Add(item);
+            }
+            
+            if (viewModel.SelectedEntry != null)
+            {
+                // Synchronize single selection and focus anchor
+                var index = viewModel.FilteredEntries.IndexOf(viewModel.SelectedEntry);
+                if (index != -1)
+                {
+                    listBox.SelectedIndex = index;
+                }
+                else
+                {
+                    listBox.SelectedItem = viewModel.SelectedEntry;
+                }
+                
+                listBox.ScrollIntoView(viewModel.SelectedEntry);
+            }
+        }
+        finally
+        {
+            _isUpdatingSelectionFromCode = false;
+        }
     }
 
     private void ListBox_DoubleTapped(object? sender, TappedEventArgs e)
@@ -38,24 +103,38 @@ public partial class FilePanelView : UserControl
         }
     }
 
+
+
+    private bool _isUpdatingSelectionFromCode;
+
     private void ListBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
+        if (_isUpdatingSelectionFromCode) return;
+        
         if (DataContext is not FilePanelViewModel viewModel || sender is not ListBox listBox)
         {
             return;
         }
 
-        // Sync selected items to ViewModel
-        viewModel.SelectedEntries.Clear();
-        if (listBox.SelectedItems != null)
+        // To prevent loop when viewModel updates selection
+        _isUpdatingSelectionFromCode = true;
+        try
         {
-            foreach (var item in listBox.SelectedItems)
+            viewModel.SelectedEntries.Clear();
+            if (listBox.SelectedItems != null)
             {
-                if (item is FileSystemEntry entry)
+                foreach (var item in listBox.SelectedItems)
                 {
-                    viewModel.SelectedEntries.Add(entry);
+                    if (item is FileSystemEntry entry)
+                    {
+                        viewModel.SelectedEntries.Add(entry);
+                    }
                 }
             }
+        }
+        finally
+        {
+            _isUpdatingSelectionFromCode = false;
         }
     }
 
@@ -104,28 +183,62 @@ public partial class FilePanelView : UserControl
             return;
         }
 
-        // Handle alphanumeric keys for incremental search
-        if ((e.Key >= Key.A && e.Key <= Key.Z) || 
-            (e.Key >= Key.D0 && e.Key <= Key.D9) ||
-            (e.Key >= Key.NumPad0 && e.Key <= Key.NumPad9))
+        // Convert key to character (if possible)
+        var keyChar = GetKeyChar(e);
+        
+        // Handle alphanumeric and common punctuation for incremental search
+        if (!string.IsNullOrEmpty(keyChar))
         {
-            var keyChar = GetKeyChar(e);
-            if (!string.IsNullOrEmpty(keyChar))
+            // Always mark as handled to prevent bubbling up to menu or other controls
+            // This is CRITICAL to prevent the Alt-key access key behavior from stealing focus
+            e.Handled = true;
+
+            _incrementalSearchBuffer += keyChar;
+            _lastKeyPressTime = currentTime;
+
+            // Find and select the first matching entry
+            var matchingEntry = viewModel.FilteredEntries
+                .FirstOrDefault(entry => 
+                    entry.Name.StartsWith(_incrementalSearchBuffer, StringComparison.OrdinalIgnoreCase));
+
+            if (matchingEntry != null)
             {
-                // Always mark as handled to prevent bubbling up to menu or other controls
-                e.Handled = true;
-
-                _incrementalSearchBuffer += keyChar;
-                _lastKeyPressTime = currentTime;
-
-                // Find and select the first matching entry
-                var matchingEntry = viewModel.FilteredEntries
-                    .FirstOrDefault(entry => 
-                        entry.Name.StartsWith(_incrementalSearchBuffer, StringComparison.OrdinalIgnoreCase));
-
-                if (matchingEntry != null)
+                // El flag debe activarse ANTES de asignar SelectedEntry porque el binding
+                // bidireccional (SelectedItem ↔ SelectedEntry) dispararía SelectionChanged
+                // inmediatamente, corrompiendo SelectedEntries con un estado intermedio.
+                _isUpdatingSelectionFromCode = true;
+                try
                 {
                     viewModel.SelectedEntry = matchingEntry;
+                    viewModel.SelectedEntries.Clear();
+                    viewModel.SelectedEntries.Add(matchingEntry);
+
+                    // Sincronizar ancla de teclado en el ListBox para que las flechas
+                    // continúen desde el elemento encontrado y no desde la posición anterior.
+                    if (this.FindControl<ListBox>("FileListBox") is ListBox listBox)
+                    {
+                        var index = viewModel.FilteredEntries.IndexOf(matchingEntry);
+                        if (index != -1)
+                            listBox.SelectedIndex = index;
+                        listBox.ScrollIntoView(matchingEntry);
+
+                        // SelectedIndex actualiza la selección pero NO el foco de teclado.
+                        // La navegación con flechas parte del ListBoxItem que tiene foco lógico,
+                        // por lo que hay que enfocarlo explícitamente después de que
+                        // ScrollIntoView haya realizado el container virtualizado.
+                        if (index != -1)
+                        {
+                            Dispatcher.UIThread.Post(() =>
+                            {
+                                if (listBox.ContainerFromIndex(index) is ListBoxItem item)
+                                    item.Focus(NavigationMethod.Directional);
+                            }, DispatcherPriority.Loaded);
+                        }
+                    }
+                }
+                finally
+                {
+                    _isUpdatingSelectionFromCode = false;
                 }
             }
         }
@@ -146,11 +259,35 @@ public partial class FilePanelView : UserControl
         {
             return ((char)('0' + (e.Key - Key.NumPad0))).ToString();
         }
-        return string.Empty;
+        
+        // Handle common punctuation and symbols
+        return e.Key switch
+        {
+            Key.Space => " ",
+            Key.OemPeriod or Key.Decimal => ".",
+            Key.OemComma => ",",
+            Key.OemMinus or Key.Subtract => "-",
+            Key.OemPlus or Key.Add => "+",
+            Key.Oem5 => "_", // Usually underscore/backslash
+            Key.OemOpenBrackets => "[",
+            Key.OemCloseBrackets => "]",
+            Key.Oem1 => ";",
+            Key.Oem7 => "'",
+            _ => string.Empty
+        };
     }
 
     private void ListBox_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
+        if (DataContext is FilePanelViewModel viewModel)
+        {
+            // Sync active panel to MainWindow
+            if (this.VisualRoot is Window window && window.DataContext is MainWindowViewModel mainVm)
+            {
+                mainVm.SetActivePanel(viewModel);
+            }
+        }
+
         if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
             _dragStartPoint = e.GetPosition(this);
@@ -236,12 +373,19 @@ public sealed class FileSizeConverter : IValueConverter
 
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        if (value is not long bytes)
+        if (value is not FileSystemEntry entry)
         {
             return string.Empty;
         }
 
-        return FileSizeFormatter.FormatForDisplay(bytes);
+        if (entry.EntryType == FileSystemEntryType.Directory || 
+            entry.EntryType == FileSystemEntryType.Drive || 
+            entry.EntryType == FileSystemEntryType.ParentDirectory)
+        {
+            return "<DIR>";
+        }
+
+        return FileSizeFormatter.FormatForDisplay(entry.Size);
     }
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)

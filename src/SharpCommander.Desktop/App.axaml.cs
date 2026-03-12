@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Data.Core.Plugins;
 using Avalonia.Markup.Xaml;
@@ -34,7 +35,8 @@ public sealed class App : Application
             var fileSystemService = new FileSystemService();
             var settingsService = new SettingsService();
             var dialogService = new DialogService();
-            var mainViewModel = new MainWindowViewModel(fileSystemService, settingsService, dialogService);
+            var clipboardService = new ClipboardService();
+            var mainViewModel = new MainWindowViewModel(fileSystemService, settingsService, dialogService, clipboardService);
 
             desktop.MainWindow = new MainWindow
             {

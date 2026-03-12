@@ -29,7 +29,7 @@ public sealed class FileSystemWatcherService : IFileSystemWatcher
                          | NotifyFilters.FileName 
                          | NotifyFilters.LastWrite 
                          | NotifyFilters.Size,
-            Filter = "*.*",
+            Filter = "*",
             IncludeSubdirectories = false,
             EnableRaisingEvents = true
         };

@@ -33,17 +33,11 @@ public static class FileSizeFormatter
 
     /// <summary>
     /// Formats a byte count for display in file lists.
-    /// Returns "&lt;DIR&gt;" for zero bytes (directories).
     /// </summary>
     /// <param name="bytes">The number of bytes to format.</param>
-    /// <returns>A formatted string or "&lt;DIR&gt;" for directories.</returns>
+    /// <returns>A formatted string.</returns>
     public static string FormatForDisplay(long bytes)
     {
-        if (bytes == 0)
-        {
-            return "<DIR>";
-        }
-
         return Format(bytes);
     }
 }

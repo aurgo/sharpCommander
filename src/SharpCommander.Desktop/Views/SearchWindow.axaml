@@ -1,0 +1,49 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SharpCommander.Desktop.ViewModels"
+        x:Class="SharpCommander.Desktop.Views.SearchWindow"
+        x:DataType="vm:SearchViewModel"
+        Title="Advanced Search"
+        Width="600" Height="500"
+        WindowStartupLocation="CenterOwner">
+
+    <Border Padding="15">
+        <DockPanel>
+            <StackPanel DockPanel.Dock="Top" Spacing="10">
+                <TextBlock Text="Search Path:" FontWeight="Bold" />
+                <TextBox Text="{Binding SearchPath}" />
+
+                <TextBlock Text="File Name Pattern (use * as wildcard):" FontWeight="Bold" />
+                <TextBox Text="{Binding FileNamePattern}" />
+
+                <TextBlock Text="Containing Text:" FontWeight="Bold" />
+                <TextBox Text="{Binding ContentPattern}" />
+
+                <CheckBox Content="Use Regular Expressions" IsChecked="{Binding UseRegex}" />
+
+                <Button Content="Start Search" 
+                        Command="{Binding StartSearchCommand}" 
+                        IsEnabled="{Binding !IsSearching}"
+                        HorizontalAlignment="Right" />
+                
+                <Separator Height="20" />
+            </StackPanel>
+
+            <TextBlock DockPanel.Dock="Bottom" 
+                       Text="{Binding StatusText}" 
+                       Margin="0,10,0,0" 
+                       FontStyle="Italic" />
+
+            <ListBox ItemsSource="{Binding Results}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel>
+                            <TextBlock Text="{Binding Name}" FontWeight="Bold" />
+                            <TextBlock Text="{Binding FullPath}" FontSize="10" Foreground="Gray" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </DockPanel>
+    </Border>
+</Window>

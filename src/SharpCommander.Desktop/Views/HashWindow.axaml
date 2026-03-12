@@ -13,35 +13,88 @@
 
     <Window.Styles>
         <Style Selector="TextBlock.header">
-            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontSize" Value="22" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Margin" Value="0,0,0,15" />
+        </Style>
+        <Style Selector="TextBlock.label">
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Margin" Value="0,0,0,10" />
+            <Setter Property="Margin" Value="0,15,0,5" />
+            <Setter Property="Opacity" Value="0.7" />
+            <Setter Property="FontSize" Value="13" />
+        </Style>
+        <Style Selector="TextBox.hash">
+            <Setter Property="IsReadOnly" Value="True" />
+            <Setter Property="FontFamily" Value="Consolas, Monospace" />
+            <Setter Property="Margin" Value="0,0,0,5" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="10" />
+            <Setter Property="BorderThickness" Value="1" />
         </Style>
     </Window.Styles>
 
-    <Border Padding="20">
+    <Border Padding="25">
         <DockPanel>
             <!-- Close Button -->
-            <Button DockPanel.Dock="Bottom"
-                    Content="Close"
-                    HorizontalAlignment="Right"
-                    Margin="0,20,0,0"
-                    Padding="20,8"
-                    Click="Close_Click" />
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+                <Button Content="Close" Padding="25,10" Click="Close_Click" CornerRadius="6" FontWeight="SemiBold" />
+            </StackPanel>
 
             <!-- Content -->
-            <Grid RowDefinitions="Auto,*">
-                <TextBlock Grid.Row="0" 
-                           Classes="header" 
-                           Text="File Checksums" />
-                
-                <TextBox Grid.Row="1"
-                         Text="{Binding AllHashes}"
-                         IsReadOnly="True"
-                         TextWrapping="Wrap"
-                         AcceptsReturn="True"
-                         FontFamily="Consolas, Monospace" />
-            </Grid>
+            <ScrollViewer>
+                <StackPanel Margin="0,0,15,0">
+                    <TextBlock Classes="header" Text="File Checksums" />
+
+                    <TextBlock Classes="label" Text="File Path:" />
+                    <TextBox Text="{Binding FilePath}" Classes="hash" TextWrapping="Wrap" />
+
+                    <!-- Loading State -->
+                    <Grid IsVisible="{Binding IsCalculating}" Margin="0,30,0,30">
+                        <StackPanel HorizontalAlignment="Center">
+                            <ProgressBar IsIndeterminate="True" Height="4" Width="200" Margin="0,0,0,15" />
+                            <TextBlock Text="Calculating hashes..." HorizontalAlignment="Center" Opacity="0.8" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Error State -->
+                    <TextBlock Text="{Binding ErrorMessage}" 
+                               IsVisible="{Binding HasError}" 
+                               Foreground="Firebrick" 
+                               FontWeight="SemiBold"
+                               Margin="0,20" 
+                               TextWrapping="Wrap" />
+
+                    <!-- Results State -->
+                    <StackPanel IsVisible="{Binding !IsCalculating}">
+                        <StackPanel IsVisible="{Binding !HasError}">
+                            <TextBlock Classes="label" Text="MD5:" />
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBox Grid.Column="0" Text="{Binding Md5}" Classes="hash" />
+                                <Button Grid.Column="1" Command="{Binding CopyHashCommand}" CommandParameter="{Binding Md5}" ToolTip.Tip="Copy MD5" Margin="5,0,0,5" Padding="8,0">
+                                    <PathIcon Data="M19 21H8V7h11m0-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2m-3-4H4a2 2 0 0 0-2 2v14h2V3h12V1Z" Width="14" Height="14" />
+                                </Button>
+                            </Grid>
+
+                            <TextBlock Classes="label" Text="SHA-1:" />
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBox Grid.Column="0" Text="{Binding Sha1}" Classes="hash" />
+                                <Button Grid.Column="1" Command="{Binding CopyHashCommand}" CommandParameter="{Binding Sha1}" ToolTip.Tip="Copy SHA-1" Margin="5,0,0,5" Padding="8,0">
+                                    <PathIcon Data="M19 21H8V7h11m0-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2m-3-4H4a2 2 0 0 0-2 2v14h2V3h12V1Z" Width="14" Height="14" />
+                                </Button>
+                            </Grid>
+
+                            <TextBlock Classes="label" Text="SHA-256:" />
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBox Grid.Column="0" Text="{Binding Sha256}" Classes="hash" TextWrapping="Wrap" />
+                                <Button Grid.Column="1" Command="{Binding CopyHashCommand}" CommandParameter="{Binding Sha256}" ToolTip.Tip="Copy SHA-256" Margin="5,0,0,5" Padding="8,0">
+                                    <PathIcon Data="M19 21H8V7h11m0-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2m-3-4H4a2 2 0 0 0-2 2v14h2V3h12V1Z" Width="14" Height="14" />
+                                </Button>
+                            </Grid>
+                        </StackPanel>
+                    </StackPanel>
+
+                </StackPanel>
+            </ScrollViewer>
         </DockPanel>
     </Border>
 </Window>

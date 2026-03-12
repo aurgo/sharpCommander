@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SharpCommander.Core.Interfaces;
+using SharpCommander.Desktop.Services;
 
 namespace SharpCommander.Desktop.ViewModels;
 
@@ -11,6 +12,7 @@ public sealed partial class TabViewModel : ObservableObject, IDisposable
 {
     private readonly IFileSystemService _fileSystemService;
     private readonly ISettingsService _settingsService;
+    private readonly IDialogService _dialogService;
 
     [ObservableProperty]
     private string _title = "New Tab";
@@ -24,12 +26,13 @@ public sealed partial class TabViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private FilePanelViewModel? _activePanel;
 
-    public TabViewModel(IFileSystemService fileSystemService, ISettingsService settingsService)
+    public TabViewModel(IFileSystemService fileSystemService, ISettingsService settingsService, IDialogService dialogService, IClipboardService clipboardService)
     {
         _fileSystemService = fileSystemService;
         _settingsService = settingsService;
-        _leftPanel = new FilePanelViewModel(fileSystemService, settingsService);
-        _rightPanel = new FilePanelViewModel(fileSystemService, settingsService);
+        _dialogService = dialogService;
+        _leftPanel = new FilePanelViewModel(fileSystemService, settingsService, dialogService, clipboardService);
+        _rightPanel = new FilePanelViewModel(fileSystemService, settingsService, dialogService, clipboardService);
         _activePanel = _leftPanel;
     }
 

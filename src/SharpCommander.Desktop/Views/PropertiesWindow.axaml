@@ -1,0 +1,46 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:models="using:SharpCommander.Core.Models"
+        x:Class="SharpCommander.Desktop.Views.PropertiesWindow"
+        x:DataType="models:FileSystemEntry"
+        Title="Properties"
+        Width="400" Height="450"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+
+    <Border Padding="20">
+        <DockPanel>
+            <Button DockPanel.Dock="Bottom" 
+                    Content="Close" 
+                    HorizontalAlignment="Right" 
+                    Click="Close_Click"
+                    Padding="20,8" />
+
+            <StackPanel Spacing="15">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <PathIcon Data="M13,9V3.5L18.5,9M6,2C4.89,2 4,2.89 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2H6Z" Width="32" Height="32" />
+                    <TextBlock Text="{Binding Name}" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <Separator />
+
+                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" Margin="0,5">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Type:" FontWeight="Bold" Margin="0,5,15,5" />
+                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding EntryType}" Margin="0,5" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Location:" FontWeight="Bold" Margin="0,5,15,5" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding FullPath}" TextWrapping="Wrap" Margin="0,5" />
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Size:" FontWeight="Bold" Margin="0,5,15,5" />
+                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Size}" Margin="0,5" />
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Modified:" FontWeight="Bold" Margin="0,5,15,5" />
+                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding LastModified, StringFormat='{}{0:f}'}" Margin="0,5" />
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Extension:" FontWeight="Bold" Margin="0,5,15,5" />
+                    <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding Extension}" Margin="0,5" />
+                </Grid>
+            </StackPanel>
+        </DockPanel>
+    </Border>
+</Window>

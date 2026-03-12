@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
+using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -23,6 +25,12 @@ public partial class HashViewModel : ObservableObject
     private string _allHashes = string.Empty;
 
     [ObservableProperty]
+    private string _errorMessage = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasError;
+
+    [ObservableProperty]
     private bool _isCalculating;
 
     public HashViewModel(string filePath)
@@ -35,14 +43,15 @@ public partial class HashViewModel : ObservableObject
     {
         if (string.IsNullOrEmpty(FilePath) || !File.Exists(FilePath))
         {
-            AllHashes = "File not found.";
+            HasError = true;
+            ErrorMessage = "File not found.";
             return;
         }
 
         try
         {
             IsCalculating = true;
-            AllHashes = "Calculating...";
+            HasError = false;
 
             await Task.Run(() =>
             {
@@ -82,7 +91,8 @@ public partial class HashViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            AllHashes = $"Error calculating hashes: {ex.Message}";
+            HasError = true;
+            ErrorMessage = $"Error calculating hashes: {ex.Message}";
         }
         finally
         {
@@ -94,5 +104,20 @@ public partial class HashViewModel : ObservableObject
     private void Close()
     {
         // This command will be bound to the window close action
+    }
+
+    [RelayCommand]
+    private async Task CopyHashAsync(string? hashValue)
+    {
+        if (string.IsNullOrEmpty(hashValue)) return;
+        
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            var clipboard = desktop.MainWindow?.Clipboard;
+            if (clipboard != null)
+            {
+                await clipboard.SetTextAsync(hashValue);
+            }
+        }
     }
 }

@@ -15,6 +15,8 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
 {
     private readonly IFileSystemService _fileSystemService;
     private readonly ISettingsService _settingsService;
+    private readonly IDialogService _dialogService;
+    private readonly IClipboardService _clipboardService;
     private readonly FileSystemWatcherService _watcher;
     private bool _disposed;
 
@@ -36,8 +38,7 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private FileSystemEntry? _selectedEntry;
 
-    [ObservableProperty]
-    private ObservableCollection<FileSystemEntry> _selectedEntries = [];
+    public ObservableCollection<FileSystemEntry> SelectedEntries { get; } = [];
 
     [ObservableProperty]
     private string _statusText = string.Empty;
@@ -66,10 +67,12 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private ObservableCollection<FavoriteItem> _favorites = [];
 
-    public FilePanelViewModel(IFileSystemService fileSystemService, ISettingsService settingsService)
+    public FilePanelViewModel(IFileSystemService fileSystemService, ISettingsService settingsService, IDialogService dialogService, IClipboardService clipboardService)
     {
         _fileSystemService = fileSystemService;
         _settingsService = settingsService;
+        _dialogService = dialogService;
+        _clipboardService = clipboardService;
         _watcher = new FileSystemWatcherService();
         _watcher.Changed += OnFileSystemChanged;
         
@@ -231,6 +234,9 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
             case FileSystemEntryType.Drive:
                 await NavigateToAsync(SelectedEntry.FullPath);
                 break;
+            case FileSystemEntryType.ParentDirectory:
+                await NavigateUpAsync();
+                break;
             case FileSystemEntryType.File:
                 await _fileSystemService.OpenWithDefaultAsync(SelectedEntry.FullPath);
                 break;
@@ -301,6 +307,92 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
+    private async Task DeleteSelectedAsync()
+    {
+        if (SelectedEntry is null) return;
+        try
+        {
+            await _fileSystemService.DeleteAsync(SelectedEntry.FullPath);
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Error deleting: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private async Task RenameSelectedAsync()
+    {
+        if (SelectedEntry is null) return;
+        
+        var newName = await _dialogService.ShowInputDialogAsync(
+            "Rename", 
+            $"Enter new name for '{SelectedEntry.Name}':", 
+            SelectedEntry.Name);
+            
+        if (!string.IsNullOrEmpty(newName) && newName != SelectedEntry.Name)
+        {
+            try
+            {
+                await _fileSystemService.RenameAsync(SelectedEntry.FullPath, newName);
+                await RefreshAsync();
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"Error renaming: {ex.Message}";
+            }
+        }
+    }
+
+    [RelayCommand]
+    private async Task ShowPropertiesAsync()
+    {
+        if (SelectedEntry is null) return;
+        await _dialogService.ShowPropertiesDialogAsync(SelectedEntry);
+    }
+
+    [RelayCommand]
+    private void Cut()
+    {
+        var items = GetSelectedItems();
+        if (items.Count == 0) return;
+        _clipboardService.Cut(items);
+    }
+
+    [RelayCommand]
+    private void Copy()
+    {
+        var items = GetSelectedItems();
+        if (items.Count == 0) return;
+        _clipboardService.Copy(items);
+    }
+
+    [RelayCommand]
+    private async Task PasteAsync()
+    {
+        var items = _clipboardService.GetItems();
+        if (items.Count == 0) return;
+
+        if (_clipboardService.IsCutMode)
+        {
+            foreach (var item in items)
+            {
+                await _fileSystemService.MoveAsync(item.FullPath, CurrentPath, true);
+            }
+            _clipboardService.Clear();
+        }
+        else
+        {
+            foreach (var item in items)
+            {
+                await _fileSystemService.CopyAsync(item.FullPath, CurrentPath, true);
+            }
+        }
+        await RefreshAsync();
+    }
+
+    [RelayCommand]
     private void ToggleSearch()
     {
         IsSearchActive = !IsSearchActive;
@@ -326,6 +418,10 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
 
     private void ApplySearchFilter()
     {
+        // Store current selection(s) by name/path to restore later
+        var selectedPath = SelectedEntry?.FullPath;
+        var selectedPaths = SelectedEntries.Select(e => e.FullPath).ToList();
+
         if (string.IsNullOrWhiteSpace(SearchFilter))
         {
             FilteredEntries = new ObservableCollection<FileSystemEntry>(Entries);
@@ -335,6 +431,25 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
             var filtered = Entries.Where(e => 
                 e.Name.Contains(SearchFilter, StringComparison.OrdinalIgnoreCase));
             FilteredEntries = new ObservableCollection<FileSystemEntry>(filtered);
+        }
+
+        // Restore selection if possible
+        if (selectedPath != null)
+        {
+            SelectedEntry = FilteredEntries.FirstOrDefault(e => e.FullPath == selectedPath);
+        }
+
+        if (selectedPaths.Count > 0)
+        {
+            SelectedEntries.Clear();
+            foreach (var path in selectedPaths)
+            {
+                var entry = FilteredEntries.FirstOrDefault(e => e.FullPath == path);
+                if (entry != null)
+                {
+                    SelectedEntries.Add(entry);
+                }
+            }
         }
     }
 
@@ -353,10 +468,26 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
         StatusText = $"{directories} folders, {files} files ({sizeText})";
     }
 
-    private async void OnFileSystemChanged(object? sender, FileSystemChangedEventArgs e)
+    private System.Timers.Timer? _refreshTimer;
+
+    private void OnFileSystemChanged(object? sender, FileSystemChangedEventArgs e)
     {
-        // Refresh the view when file system changes
-        await RefreshAsync();
+        // Debounce refreshes to avoid excessive CPU usage and UI flicker
+        if (_refreshTimer == null)
+        {
+            _refreshTimer = new System.Timers.Timer(200);
+            _refreshTimer.AutoReset = false;
+            _refreshTimer.Elapsed += async (s, args) => 
+            {
+                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () => 
+                {
+                    await RefreshAsync();
+                });
+            };
+        }
+
+        _refreshTimer.Stop();
+        _refreshTimer.Start();
     }
 
     public void Dispose()
@@ -368,6 +499,12 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
 
         _watcher.Changed -= OnFileSystemChanged;
         _watcher.Dispose();
+        
+        if (_refreshTimer != null)
+        {
+            _refreshTimer.Stop();
+            _refreshTimer.Dispose();
+        }
         _disposed = true;
     }
 }

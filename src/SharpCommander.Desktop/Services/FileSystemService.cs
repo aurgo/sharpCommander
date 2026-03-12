@@ -41,7 +41,7 @@ public sealed class FileSystemService : IFileSystemService
                 }
 
                 // Add directories first
-                foreach (var dir in directoryInfo.GetDirectories())
+                foreach (var dir in directoryInfo.EnumerateDirectories())
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     
@@ -55,7 +55,7 @@ public sealed class FileSystemService : IFileSystemService
                 }
 
                 // Add files
-                foreach (var file in directoryInfo.GetFiles())
+                foreach (var file in directoryInfo.EnumerateFiles())
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     
@@ -150,6 +150,12 @@ public sealed class FileSystemService : IFileSystemService
     {
         var sourceInfo = new DirectoryInfo(source);
         var targetPath = Path.Combine(destination, sourceInfo.Name);
+
+        // Prevent infinite recursion if copying a folder into itself
+        if (targetPath.StartsWith(sourceInfo.FullName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new IOException($"Circular copy detected: Cannot copy '{source}' to a subfolder of itself '{targetPath}'.");
+        }
         
         Directory.CreateDirectory(targetPath);
 
@@ -274,7 +280,7 @@ public sealed class FileSystemService : IFileSystemService
                 // Set working directory to the file's directory, not the app's directory
                 WorkingDirectory = Path.GetDirectoryName(path) ?? string.Empty
             };
-            Process.Start(startInfo);
+            using var process = Process.Start(startInfo);
         }, cancellationToken);
     }
 
@@ -296,6 +302,30 @@ public sealed class FileSystemService : IFileSystemService
     public string GetDefaultDirectory()
     {
         return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    }
+
+    public async Task RenameAsync(string path, string newName, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+        ArgumentException.ThrowIfNullOrEmpty(newName);
+
+        await Task.Run(() =>
+        {
+            var isDirectory = Directory.Exists(path);
+            var parent = Path.GetDirectoryName(path);
+            if (parent == null) throw new InvalidOperationException("Cannot rename root.");
+            
+            var newPath = Path.Combine(parent, newName);
+            
+            if (isDirectory)
+            {
+                Directory.Move(path, newPath);
+            }
+            else
+            {
+                File.Move(path, newPath);
+            }
+        }, cancellationToken);
     }
 
     public async Task OpenInFileExplorerAsync(string path, CancellationToken cancellationToken = default)

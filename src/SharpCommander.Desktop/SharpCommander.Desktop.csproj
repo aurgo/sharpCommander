@@ -10,8 +10,8 @@
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-    <Icon>Resources\icon.ico</Icon>
-    <ApplicationIcon>Resources\icon.ico</ApplicationIcon>
+    <Icon>Resources/icon.ico</Icon>
+    <ApplicationIcon>Resources/icon.ico</ApplicationIcon>
     <Version>2.0.0</Version>
     <Authors>AURGO</Authors>
     <Company>AURGO</Company>
@@ -50,5 +50,12 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Styles\*.axaml" />
+    <AvaloniaResource Include="Resources/**" Exclude="Resources/*.icns" />
+  </ItemGroup>
+
+  <!-- macOS: copy Info.plist and icon.icns to output for .app bundle creation -->
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <None Include="Info.plist" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Resources/icon.icns" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

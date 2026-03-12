@@ -63,6 +63,11 @@ public interface IFileSystemService
     string GetDefaultDirectory();
     
     /// <summary>
+    /// Renames a file or directory.
+    /// </summary>
+    Task RenameAsync(string path, string newName, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Opens the specified path in the system file explorer.
     /// </summary>
     Task OpenInFileExplorerAsync(string path, CancellationToken cancellationToken = default);

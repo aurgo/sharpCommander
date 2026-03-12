@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SharpCommander.Core.Interfaces;
 using SharpCommander.Core.Models;
+using SharpCommander.Desktop.Services;
 
 namespace SharpCommander.Desktop.ViewModels;
 
@@ -14,6 +15,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IFileSystemService _fileSystemService;
     private readonly ISettingsService _settingsService;
     private readonly IDialogService _dialogService;
+    private readonly IClipboardService _clipboardService;
 
     [ObservableProperty]
     private ObservableCollection<TabViewModel> _tabs = [];
@@ -48,21 +50,18 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _newItemName = string.Empty;
 
-    // Clipboard-related properties
-    private List<FileSystemEntry> _clipboardItems = new();
-    private bool _clipboardCutMode = false;
-
     public string Title => "SharpCommander - File Manager";
 
     public string Version => "2.0.0";
 
-    public MainWindowViewModel(IFileSystemService fileSystemService, ISettingsService settingsService, IDialogService dialogService)
+    public MainWindowViewModel(IFileSystemService fileSystemService, ISettingsService settingsService, IDialogService dialogService, IClipboardService clipboardService)
     {
         _fileSystemService = fileSystemService;
         _settingsService = settingsService;
         _dialogService = dialogService;
-        _leftPanel = new FilePanelViewModel(fileSystemService, settingsService);
-        _rightPanel = new FilePanelViewModel(fileSystemService, settingsService);
+        _clipboardService = clipboardService;
+        _leftPanel = new FilePanelViewModel(fileSystemService, settingsService, dialogService, clipboardService);
+        _rightPanel = new FilePanelViewModel(fileSystemService, settingsService, dialogService, clipboardService);
         _activePanel = _leftPanel;
 
         // Subscribe to favorites changes to sync both panels
@@ -70,7 +69,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _rightPanel.FavoritesChanged += OnFavoritesChanged;
 
         // Initialize with a default tab
-        var defaultTab = new TabViewModel(fileSystemService, settingsService);
+        var defaultTab = new TabViewModel(fileSystemService, settingsService, dialogService, clipboardService);
         Tabs.Add(defaultTab);
         CurrentTab = defaultTab;
     }
@@ -127,6 +126,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public void SetActivePanel(FilePanelViewModel panel)
     {
         ActivePanel = panel;
+        if (CurrentTab != null)
+        {
+            CurrentTab.ActivePanel = panel;
+        }
     }
 
     [RelayCommand]
@@ -279,14 +282,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task RenameAsync()
     {
-        if (ActivePanel?.SelectedEntry is null)
-        {
-            StatusMessage = "No item selected for rename";
-            return;
-        }
-
-        // In a real app would show a rename dialog
-        StatusMessage = "Rename: Press F2 or right-click for rename option";
+        if (ActivePanel == null) return;
+        await ActivePanel.RenameSelectedCommand.ExecuteAsync(null);
     }
 
     [RelayCommand]
@@ -335,7 +332,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task NewTabAsync()
     {
-        var newTab = new TabViewModel(_fileSystemService, _settingsService);
+        var newTab = new TabViewModel(_fileSystemService, _settingsService, _dialogService, _clipboardService);
         await newTab.InitializeAsync();
         Tabs.Add(newTab);
         CurrentTab = newTab;
@@ -393,45 +390,30 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void CopyToClipboard()
     {
-        if (ActivePanel == null)
-        {
-            return;
-        }
-
+        if (ActivePanel == null) return;
         var selectedItems = ActivePanel.GetSelectedItems();
-        if (selectedItems.Count == 0)
-        {
-            return;
-        }
+        if (selectedItems.Count == 0) return;
 
-        _clipboardItems = selectedItems.ToList();
-        _clipboardCutMode = false;
-        StatusMessage = $"Copied {_clipboardItems.Count} item(s) to clipboard";
+        _clipboardService.Copy(selectedItems);
+        StatusMessage = $"Copied {selectedItems.Count} item(s) to clipboard";
     }
 
     [RelayCommand]
     private void CutToClipboard()
     {
-        if (ActivePanel == null)
-        {
-            return;
-        }
-
+        if (ActivePanel == null) return;
         var selectedItems = ActivePanel.GetSelectedItems();
-        if (selectedItems.Count == 0)
-        {
-            return;
-        }
+        if (selectedItems.Count == 0) return;
 
-        _clipboardItems = selectedItems.ToList();
-        _clipboardCutMode = true;
-        StatusMessage = $"Cut {_clipboardItems.Count} item(s) to clipboard";
+        _clipboardService.Cut(selectedItems);
+        StatusMessage = $"Cut {selectedItems.Count} item(s) to clipboard";
     }
 
     [RelayCommand]
     private async Task PasteFromClipboardAsync()
     {
-        if (ActivePanel == null || _clipboardItems.Count == 0)
+        var items = _clipboardService.GetItems();
+        if (ActivePanel == null || items.Count == 0)
         {
             StatusMessage = "Clipboard is empty";
             return;
@@ -445,26 +427,23 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
         var destination = ActivePanel.CurrentPath;
 
-        if (_clipboardCutMode)
+        if (_clipboardService.IsCutMode)
         {
-            // Move operation
             await ExecuteFileOperationAsync(
                 "Moving",
-                _clipboardItems,
+                items,
                 async (item, progress) =>
                 {
                     await _fileSystemService.MoveAsync(item.FullPath, destination, true, progress);
                 }
             );
-            _clipboardItems.Clear();
-            _clipboardCutMode = false;
+            _clipboardService.Clear();
         }
         else
         {
-            // Copy operation
             await ExecuteFileOperationAsync(
                 "Pasting",
-                _clipboardItems,
+                items,
                 async (item, progress) =>
                 {
                     await _fileSystemService.CopyAsync(item.FullPath, destination, true, progress);
@@ -476,41 +455,45 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void ShowAdvancedSearch()
+    private async Task ShowAdvancedSearchAsync()
     {
-        StatusMessage = "Advanced search dialog would open here";
-        // TODO: Implement advanced search dialog with regex and content search
+        if (ActivePanel == null) return;
+        await _dialogService.ShowAdvancedSearchDialogAsync(ActivePanel.CurrentPath);
     }
 
     [RelayCommand]
-    private void ShowMassRename()
+    private async Task ShowMassRenameAsync()
     {
-        if (ActivePanel == null)
-        {
-            return;
-        }
+        if (ActivePanel == null) return;
 
-        var selectedItems = ActivePanel.GetSelectedItems();
-        if (selectedItems.Count == 0)
+        // Get actual file paths from selected entries
+        var selectedFiles = ActivePanel.SelectedEntries
+            .Where(e => e.EntryType == FileSystemEntryType.File)
+            .Select(e => e.FullPath)
+            .ToList();
+
+        if (selectedFiles.Count == 0)
         {
             StatusMessage = "No files selected for mass rename";
             return;
         }
 
-        StatusMessage = $"Mass rename dialog would open for {selectedItems.Count} item(s)";
-        // TODO: Implement mass rename dialog
+        await _dialogService.ShowMassRenameDialogAsync(selectedFiles);
     }
 
     [RelayCommand]
     private async Task CalculateHashAsync()
     {
-        if (ActivePanel?.SelectedEntry == null)
+        if (ActivePanel == null) return;
+        
+        var selectedItem = ActivePanel.SelectedEntry;
+        if (selectedItem == null)
         {
             StatusMessage = "No file selected";
             return;
         }
 
-        if (ActivePanel.SelectedEntry.EntryType != FileSystemEntryType.File)
+        if (selectedItem.EntryType != FileSystemEntryType.File)
         {
             StatusMessage = "Please select a file to calculate hash";
             return;
@@ -518,7 +501,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
         try
         {
-            await _dialogService.ShowHashDialogAsync(ActivePanel.SelectedEntry.FullPath);
+            await _dialogService.ShowHashDialogAsync(selectedItem.FullPath);
         }
         catch (Exception ex)
         {
