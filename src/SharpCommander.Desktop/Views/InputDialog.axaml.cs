@@ -20,7 +20,22 @@ public partial class InputDialog : Window
         if (promptText != null) promptText.Text = prompt;
         
         var inputBox = this.FindControl<TextBox>("InputBox");
-        if (inputBox != null) inputBox.Text = initialValue;
+        if (inputBox != null) 
+        {
+            inputBox.Text = initialValue;
+        }
+
+        Loaded += (sender, e) =>
+        {
+            if (inputBox != null)
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    inputBox.Focus(Avalonia.Input.NavigationMethod.Pointer);
+                    inputBox.SelectAll();
+                }, Avalonia.Threading.DispatcherPriority.Input);
+            }
+        };
     }
 
     private void InitializeComponent()

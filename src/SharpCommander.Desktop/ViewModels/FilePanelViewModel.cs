@@ -248,6 +248,16 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
     /// </summary>
     public event EventHandler? FavoritesChanged;
 
+    /// <summary>
+    /// Event raised when the panel needs to reclaim focus.
+    /// </summary>
+    public event EventHandler? FocusRequested;
+
+    public void RequestFocus()
+    {
+        FocusRequested?.Invoke(this, EventArgs.Empty);
+    }
+
     [RelayCommand]
     private async Task ToggleFavoriteAsync()
     {
@@ -309,11 +319,25 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task DeleteSelectedAsync()
     {
-        if (SelectedEntry is null) return;
+        if (SelectedEntry is null || SelectedEntry.EntryType == FileSystemEntryType.ParentDirectory) return;
         try
         {
+            var currentIndex = FilteredEntries.IndexOf(SelectedEntry);
+
             await _fileSystemService.DeleteAsync(SelectedEntry.FullPath);
             await RefreshAsync();
+
+            if (FilteredEntries.Count > 0 && currentIndex >= 0)
+            {
+                var targetIndex = Math.Min(currentIndex, FilteredEntries.Count - 1);
+                var entryToSelect = FilteredEntries[targetIndex];
+
+                SelectedEntry = entryToSelect;
+                SelectedEntries.Clear();
+                SelectedEntries.Add(entryToSelect);
+            }
+
+            RequestFocus();
         }
         catch (Exception ex)
         {
@@ -324,7 +348,7 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task RenameSelectedAsync()
     {
-        if (SelectedEntry is null) return;
+        if (SelectedEntry is null || SelectedEntry.EntryType == FileSystemEntryType.ParentDirectory) return;
         
         var newName = await _dialogService.ShowInputDialogAsync(
             "Rename", 
@@ -335,13 +359,32 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
         {
             try
             {
-                await _fileSystemService.RenameAsync(SelectedEntry.FullPath, newName);
+                var oldPath = SelectedEntry.FullPath;
+                var parent = System.IO.Path.GetDirectoryName(oldPath);
+                var newPath = System.IO.Path.Combine(parent ?? string.Empty, newName);
+
+                await _fileSystemService.RenameAsync(oldPath, newName);
+                StatusText = $"Renamed to: {newName}";
                 await RefreshAsync();
+                
+                var newEntry = FilteredEntries.FirstOrDefault(e => e.FullPath == newPath);
+                if (newEntry != null)
+                {
+                    SelectedEntry = newEntry;
+                    SelectedEntries.Clear();
+                    SelectedEntries.Add(newEntry);
+                }
+
+                RequestFocus();
             }
             catch (Exception ex)
             {
                 StatusText = $"Error renaming: {ex.Message}";
             }
+        }
+        else
+        {
+            StatusText = $"Rename cancelled (left original name or empty)";
         }
     }
 
@@ -390,6 +433,7 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
             }
         }
         await RefreshAsync();
+        RequestFocus();
     }
 
     [RelayCommand]
@@ -455,11 +499,13 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
 
     public IReadOnlyList<FileSystemEntry> GetSelectedItems()
     {
-        return SelectedEntries.Count > 0 
+        var items = SelectedEntries.Count > 0 
             ? SelectedEntries.ToList() 
             : SelectedEntry is not null 
                 ? [SelectedEntry] 
                 : [];
+
+        return items.Where(e => e.EntryType != FileSystemEntryType.ParentDirectory).ToList();
     }
 
     private void UpdateStatus(int directories, int files, long totalSize)

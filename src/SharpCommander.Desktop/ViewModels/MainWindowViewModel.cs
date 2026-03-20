@@ -165,6 +165,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         );
 
         await destinationPanel.RefreshAsync();
+        ActivePanel.RequestFocus();
     }
 
     [RelayCommand]
@@ -203,6 +204,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             ActivePanel.RefreshAsync(),
             destinationPanel.RefreshAsync()
         );
+        ActivePanel.RequestFocus();
     }
 
     [RelayCommand]
@@ -219,6 +221,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
+        var firstSelected = selectedItems.FirstOrDefault();
+        var currentIndex = firstSelected != null ? ActivePanel.FilteredEntries.IndexOf(firstSelected) : -1;
+
         await ExecuteFileOperationAsync(
             "Deleting",
             selectedItems,
@@ -229,6 +234,18 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         );
 
         await ActivePanel.RefreshAsync();
+
+        if (ActivePanel.FilteredEntries.Count > 0 && currentIndex >= 0)
+        {
+            var targetIndex = Math.Min(currentIndex, ActivePanel.FilteredEntries.Count - 1);
+            var entryToSelect = ActivePanel.FilteredEntries[targetIndex];
+
+            ActivePanel.SelectedEntry = entryToSelect;
+            ActivePanel.SelectedEntries.Clear();
+            ActivePanel.SelectedEntries.Add(entryToSelect);
+        }
+
+        ActivePanel.RequestFocus();
     }
 
     [RelayCommand]
@@ -255,22 +272,38 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
-        // Default name - in a real app would show a dialog
-        var newFolderName = "New Folder";
+        var newFolderName = await _dialogService.ShowInputDialogAsync(
+            "New Folder",
+            "Enter folder name:",
+            "New Folder");
+
+        if (string.IsNullOrWhiteSpace(newFolderName))
+        {
+            return;
+        }
+
         var newFolderPath = Path.Combine(ActivePanel.CurrentPath, newFolderName);
 
-        // Find unique name
-        var counter = 1;
-        while (Directory.Exists(newFolderPath))
+        if (Directory.Exists(newFolderPath))
         {
-            newFolderName = $"New Folder ({counter++})";
-            newFolderPath = Path.Combine(ActivePanel.CurrentPath, newFolderName);
+            StatusMessage = $"Folder '{newFolderName}' already exists.";
+            return;
         }
 
         try
         {
             await _fileSystemService.CreateDirectoryAsync(newFolderPath);
             await ActivePanel.RefreshAsync();
+            
+            var newEntry = ActivePanel.FilteredEntries.FirstOrDefault(e => e.FullPath == newFolderPath);
+            if (newEntry != null)
+            {
+                ActivePanel.SelectedEntry = newEntry;
+                ActivePanel.SelectedEntries.Clear();
+                ActivePanel.SelectedEntries.Add(newEntry);
+            }
+
+            ActivePanel.RequestFocus();
             StatusMessage = $"Created folder: {newFolderName}";
         }
         catch (Exception ex)

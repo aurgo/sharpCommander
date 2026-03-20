@@ -40,6 +40,7 @@ public partial class FilePanelView : UserControl
         if (_subscribedViewModel != null)
         {
             _subscribedViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _subscribedViewModel.FocusRequested -= OnViewModelFocusRequested;
             _subscribedViewModel = null;
         }
 
@@ -47,8 +48,27 @@ public partial class FilePanelView : UserControl
         {
             _subscribedViewModel = viewModel;
             viewModel.PropertyChanged += OnViewModelPropertyChanged;
+            viewModel.FocusRequested += OnViewModelFocusRequested;
             SyncSelectionToUI(viewModel);
         }
+    }
+
+    private void OnViewModelFocusRequested(object? sender, EventArgs e)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (this.FindControl<ListBox>("FileListBox") is ListBox listBox)
+            {
+                if (listBox.SelectedItem != null && listBox.ContainerFromItem(listBox.SelectedItem) is Control container)
+                {
+                    container.Focus(NavigationMethod.Directional);
+                }
+                else
+                {
+                    listBox.Focus(NavigationMethod.Directional);
+                }
+            }
+        }, DispatcherPriority.Loaded);
     }
 
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
@@ -159,6 +179,10 @@ public partial class FilePanelView : UserControl
                 case Key.Delete:
                     // Don't handle Delete here - let it bubble up to MainWindow
                     // so the DeleteCommand can be executed
+                    break;
+                case Key.F2:
+                    viewModel.RenameSelectedCommand.Execute(null);
+                    e.Handled = true;
                     break;
                 default:
                     // Handle incremental search (type to navigate)
