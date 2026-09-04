@@ -44,6 +44,18 @@
     <ProjectReference Include="..\SharpCommander.Core\SharpCommander.Core.csproj" />
   </ItemGroup>
 
+  <!--
+    Globalization stays on (natural sort order and date formatting need culture data), so the Linux builds
+    would otherwise depend on the distribution's libicu and abort at startup on Alpine, slim container images
+    and minimal spins with "Couldn't find a valid ICU package installed on the system" - before the log is
+    even open. Shipping ICU inside the app removes that dependency; Windows and macOS use the system copy.
+  -->
+  <ItemGroup Condition="$(RuntimeIdentifier.StartsWith('linux'))">
+    <PackageReference Include="Microsoft.ICU.ICU4C.Runtime" Version="72.1.0.3" />
+    <!-- Shipping the libraries is not enough: without this switch the runtime still loads the system libicu. -->
+    <RuntimeHostConfigurationOption Include="System.Globalization.AppLocalIcu" Value="72.1.0.3" />
+  </ItemGroup>
+
   <ItemGroup>
     <AvaloniaResource Include="Styles\*.axaml" />
     <AvaloniaResource Include="Resources/**" Exclude="Resources/*.icns" />

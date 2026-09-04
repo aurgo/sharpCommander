@@ -34,6 +34,9 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
     private const string DescendingIndicator = "\u25BC";
     private static readonly TimeSpan WatcherDebounce = TimeSpan.FromMilliseconds(200);
 
+    /// <summary>How many chained listings an awaited refresh follows before it gives up waiting.</summary>
+    private const int MaxChainedListings = 4;
+
     private readonly IFileSystemService _fileSystemService;
     private readonly ISettingsService _settingsService;
     private readonly IDialogService _dialogService;
@@ -400,6 +403,9 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
         var operation = BeginLoad(isNavigation: false);
         if (operation is null)
         {
+            // Queued behind a load already in flight: wait for it and for the follow-up it schedules, so an
+            // awaited RefreshAsync still returns against a listing that has been applied.
+            await WaitForListingAsync();
             return;
         }
 
@@ -653,8 +659,14 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
 
         if (_currentLoad is { } previous)
         {
-            if (!isNavigation && previous.IsNavigation)
+            if (!isNavigation)
             {
+                // A refresh never cancels another load, navigation or refresh. Callers of an awaited
+                // RefreshAsync re-select rows immediately afterwards (delete puts the cursor on the next row,
+                // rename and new-folder select the new entry), so the listing they waited for has to be the one
+                // that applies; the watcher's debounce timer used to cancel it and leave them acting on the old
+                // rows, which then lost the cursor entirely when the newer listing arrived. EndLoad runs the
+                // queued refresh once the in-flight load finishes.
                 _refreshPending = true;
                 return null;
             }
@@ -666,6 +678,19 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
         _currentLoad = operation;
         IsLoading = true;
         return operation;
+    }
+
+    /// <summary>
+    /// Waits until no load is in flight. The follow-up refresh EndLoad queues starts a new load, so this settles
+    /// the chain rather than a single operation; the iteration cap keeps a busy watcher from holding the caller
+    /// indefinitely, in which case the listing is simply one generation behind.
+    /// </summary>
+    private async Task WaitForListingAsync()
+    {
+        for (var attempt = 0; attempt < MaxChainedListings && _currentLoad is { } inFlight; attempt++)
+        {
+            await inFlight.Completion;
+        }
     }
 
     private bool IsCurrent(LoadOperation operation)
@@ -1364,10 +1389,14 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
     private sealed class LoadOperation(bool isNavigation) : IDisposable
     {
         private readonly CancellationTokenSource _cancellation = new();
+        private readonly TaskCompletionSource _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public bool IsNavigation { get; } = isNavigation;
 
         public CancellationToken Token => _cancellation.Token;
+
+        /// <summary>Completes when this load has finished, whether it applied its listing or was superseded.</summary>
+        public Task Completion => _completion.Task;
 
         public void Cancel()
         {
@@ -1381,8 +1410,14 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
             }
         }
 
+        public void Complete()
+        {
+            _completion.TrySetResult();
+        }
+
         public void Dispose()
         {
+            Complete();
             _cancellation.Dispose();
         }
     }

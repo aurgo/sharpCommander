@@ -122,10 +122,27 @@ public sealed partial class FileOperationsService : ObservableObject, IFileOpera
 
     private async Task TransferItemsAsync(Batch batch, FileOperationKind kind, IReadOnlyList<string> sources, string destinationDirectory)
     {
+        // Planning stats every source three times over. That is microseconds locally but milliseconds per
+        // round trip on an SMB, NFS or AFP mount, and it runs before the first byte moves: on the UI thread a
+        // few thousand selected files froze the window, with the progress panel not yet shown and Cancel not
+        // yet clickable. The results are applied back on the caller's thread, where the batch state lives.
+        var planned = await Task.Run(
+            () =>
+            {
+                var items = new List<WorkItem>(sources.Count);
+                foreach (var source in sources)
+                {
+                    batch.Token.ThrowIfCancellationRequested();
+                    items.Add(PlanTransfer(source, destinationDirectory, kind));
+                }
+
+                return items;
+            },
+            batch.Token);
+
         var plan = new List<WorkItem>(sources.Count);
-        foreach (var source in sources)
+        foreach (var item in planned)
         {
-            var item = PlanTransfer(source, destinationDirectory, kind);
             if (item.Error is not null)
             {
                 batch.FailUpFront(item.Path, item.Error);
@@ -597,9 +614,11 @@ public sealed partial class FileOperationsService : ObservableObject, IFileOpera
     {
         try
         {
+            // Both branches measure off the UI thread: a directory already does, and a file's length is a stat
+            // that costs a network round trip on a remote share.
             return item.IsDirectory
                 ? await _fileSystem.GetDirectorySizeAsync(item.Path, null, cancellationToken)
-                : new FileInfo(item.Path).Length;
+                : await Task.Run(() => new FileInfo(item.Path).Length, cancellationToken);
         }
         catch (OperationCanceledException)
         {

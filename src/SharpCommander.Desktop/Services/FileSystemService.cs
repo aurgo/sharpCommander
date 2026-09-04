@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Diagnostics;
 using SharpCommander.Core.Interfaces;
 using SharpCommander.Core.Models;
@@ -18,7 +19,8 @@ public sealed class FileSystemService : IFileSystemService
         ".exe", ".bat", ".cmd", ".com", ".scr", ".pif", ".vbs", ".vbe",
         ".js", ".jse", ".ws", ".wsf", ".wsc", ".wsh", ".ps1", ".ps1xml",
         ".ps2", ".ps2xml", ".psc1", ".psc2", ".msi", ".msp", ".reg", ".inf",
-        ".sh", ".bash", ".zsh", ".command", ".run", ".appimage"
+        ".sh", ".bash", ".zsh", ".command", ".tool", ".run", ".appimage",
+        ".jar", ".lnk", ".hta", ".cpl", ".msc"
     };
 
     private const UnixFileMode AnyExecute = UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute;
@@ -84,15 +86,38 @@ public sealed class FileSystemService : IFileSystemService
 
         await Task.Run(() =>
         {
-            var startInfo = new ProcessStartInfo
+            using var process = Process.Start(CreateOpenStartInfo(path));
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Builds the command that opens an entry with its default handler. On Unix the platform opener is invoked
+    /// by name instead of letting UseShellExecute decide: .NET runs any file whose execute bit is set directly,
+    /// which would start a program without the confirmation <see cref="IsExecutableOrScript"/> exists to prompt
+    /// for, and would exec every file on a FAT or NTFS-3g mount before falling back to the opener.
+    /// </summary>
+    private static ProcessStartInfo CreateOpenStartInfo(string path)
+    {
+        var workingDirectory = Path.GetDirectoryName(path) ?? string.Empty;
+
+        if (OperatingSystem.IsWindows())
+        {
+            return new ProcessStartInfo
             {
                 FileName = path,
                 UseShellExecute = true,
-                // Set working directory to the file's directory, not the app's directory
-                WorkingDirectory = Path.GetDirectoryName(path) ?? string.Empty
+                WorkingDirectory = workingDirectory
             };
-            using var process = Process.Start(startInfo);
-        }, cancellationToken);
+        }
+
+        var opener = OperatingSystem.IsMacOS() ? "open" : "xdg-open";
+        var startInfo = new ProcessStartInfo(opener)
+        {
+            UseShellExecute = false,
+            WorkingDirectory = workingDirectory
+        };
+        startInfo.ArgumentList.Add(path);
+        return startInfo;
     }
 
     public bool IsExecutableOrScript(string path)
@@ -103,29 +128,57 @@ public sealed class FileSystemService : IFileSystemService
         }
 
         var extension = Path.GetExtension(path);
-        if (extension.Length > 0)
+        if (ExecutableExtensions.Contains(extension))
         {
-            return ExecutableExtensions.Contains(extension);
+            return true;
         }
 
-        if (OperatingSystem.IsWindows())
-        {
-            return false;
-        }
-
-        if (!File.Exists(path))
+        // On Unix the extension does not decide: the kernel runs anything with the execute bit, so an extension
+        // the list does not know (hello.py, tool.x86_64, an ELF renamed foo.1) is still a program. The magic
+        // number keeps this from flagging every file on a FAT or NTFS-3g mount, where everything is mode 0777.
+        if (OperatingSystem.IsWindows() || !File.Exists(path))
         {
             return false;
         }
 
         try
         {
-            return (File.GetUnixFileMode(path) & AnyExecute) != 0;
+            return (File.GetUnixFileMode(path) & AnyExecute) != 0
+                   && (extension.Length == 0 || HasExecutableHeader(path));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Reads the first bytes of a file and reports whether they are a shebang, an ELF image or a Mach-O image
+    /// (thin or universal, either byte order). Anything else is data that merely carries the execute bit.
+    /// </summary>
+    private static bool HasExecutableHeader(string path)
+    {
+        Span<byte> header = stackalloc byte[4];
+
+        using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        {
+            if (stream.ReadAtLeast(header, header.Length, throwOnEndOfStream: false) < header.Length)
+            {
+                return false;
+            }
+        }
+
+        if (header[0] == '#' && header[1] == '!')
+        {
+            return true;
+        }
+
+        var magic = BinaryPrimitives.ReadUInt32BigEndian(header);
+
+        return magic is 0x7F454C46 // ELF
+            or 0xFEEDFACE or 0xFEEDFACF // Mach-O, 32 and 64 bit
+            or 0xCEFAEDFE or 0xCFFAEDFE // the same, byte swapped
+            or 0xCAFEBABE or 0xBEBAFECA; // Mach-O universal binary
     }
 
     public bool Exists(string path)

@@ -91,6 +91,7 @@ public sealed class TrashService : ITrashService
 
     // ---- Linux ------------------------------------------------------------------------------------------
 
+    [SupportedOSPlatform("linux")]
     private static async Task MoveToTrashLinuxAsync(string fullPath, CancellationToken cancellationToken)
     {
         if (await RunProcessAsync("gio", ["trash", "--", fullPath], cancellationToken))
@@ -98,14 +99,65 @@ public sealed class TrashService : ITrashService
             return;
         }
 
-        await Task.Run(() => MoveToFreedesktopTrash(fullPath, GetFreedesktopTrashRoot()), cancellationToken);
+        await Task.Run(
+            () =>
+            {
+                var (trashRoot, topDirectory) = ResolveFreedesktopTrash(fullPath);
+                return MoveToFreedesktopTrash(fullPath, trashRoot, topDirectory);
+            },
+            cancellationToken);
     }
+
+    /// <summary>
+    /// Picks the trash directory for an entry, following the freedesktop specification: the home trash when the
+    /// entry is on the same file system, otherwise $topdir/.Trash-$uid on its own volume. Without this, a folder
+    /// on another file system could not be trashed at all (Directory.Move fails with EXDEV) and a file was
+    /// copied into the home directory, so trashing a 40 GB video from an external disk filled $HOME.
+    /// Returns the trash root and, for a per-volume trash, the top directory paths are recorded relative to.
+    /// </summary>
+    [SupportedOSPlatform("linux")]
+    private static (string TrashRoot, string? TopDirectory) ResolveFreedesktopTrash(string fullPath)
+    {
+        var homeTrash = GetFreedesktopTrashRoot();
+
+        try
+        {
+            var home = Path.GetDirectoryName(homeTrash) ?? homeTrash;
+            if (FileIdentity.OnSameVolume(fullPath, home) is true)
+            {
+                return (homeTrash, null);
+            }
+
+            var topDirectory = MountPoints.Of(fullPath, MountPoints.Load());
+            if (string.IsNullOrEmpty(topDirectory) || PathUtils.AreSamePath(topDirectory, "/"))
+            {
+                return (homeTrash, null);
+            }
+
+            var volumeTrash = Path.Combine(topDirectory, $".Trash-{GetEffectiveUserId()}");
+            var directory = Directory.CreateDirectory(volumeTrash);
+
+            // The specification requires the per-volume trash to be private to its owner.
+            File.SetUnixFileMode(directory.FullName, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+
+            return (volumeTrash, topDirectory);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            // A read-only or otherwise unwritable volume: fall back to the home trash, where a cross-device
+            // move surfaces as the usual "could not be moved to the trash" error rather than a silent copy.
+            return (homeTrash, null);
+        }
+    }
+
+    [DllImport("libc", EntryPoint = "geteuid", SetLastError = false)]
+    private static extern uint GetEffectiveUserId();
 
     /// <summary>
     /// Implements the freedesktop.org Trash specification: writes info/&lt;name&gt;.trashinfo first, then moves the
     /// entry to files/&lt;name&gt;. Returns the new location.
     /// </summary>
-    internal static string MoveToFreedesktopTrash(string fullPath, string trashRoot)
+    internal static string MoveToFreedesktopTrash(string fullPath, string trashRoot, string? topDirectory = null)
     {
         var filesDirectory = Path.Combine(trashRoot, "files");
         var infoDirectory = Path.Combine(trashRoot, "info");
@@ -116,7 +168,9 @@ public sealed class TrashService : ITrashService
         var infoPath = Path.Combine(infoDirectory, name + ".trashinfo");
         var info = new StringBuilder()
             .Append("[Trash Info]\n")
-            .Append("Path=").Append(EncodeTrashPath(fullPath)).Append('\n')
+            // The specification records paths relative to the top directory in a per-volume trash, so the
+            // entry can still be restored when the volume is mounted somewhere else.
+            .Append("Path=").Append(EncodeTrashPath(ToTrashInfoPath(fullPath, topDirectory))).Append('\n')
             .Append("DeletionDate=").Append(DateTime.Now.ToString("yyyy-MM-dd'T'HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)).Append('\n')
             .ToString();
 
@@ -139,6 +193,21 @@ public sealed class TrashService : ITrashService
         }
 
         return target;
+    }
+
+    /// <summary>
+    /// The path recorded in a .trashinfo file: absolute for the home trash, relative to the top directory for a
+    /// per-volume trash.
+    /// </summary>
+    private static string ToTrashInfoPath(string fullPath, string? topDirectory)
+    {
+        if (string.IsNullOrEmpty(topDirectory))
+        {
+            return fullPath;
+        }
+
+        var relative = Path.GetRelativePath(topDirectory, fullPath);
+        return relative.StartsWith("..", StringComparison.Ordinal) ? fullPath : relative;
     }
 
     private static string GetFreedesktopTrashRoot()
@@ -277,9 +346,11 @@ public sealed class TrashService : ITrashService
     // ---- Windows ----------------------------------------------------------------------------------------
 
     /// <summary>
-    /// SHFileOperationW with FOF_ALLOWUNDO. The struct is blittable (IntPtr fields, string marshalled by hand)
-    /// so the P/Invoke needs no runtime marshalling and stays AOT-safe. Layout matches the 64-bit definition;
-    /// 32-bit Windows would need Pack = 1, which the published builds do not target.
+    /// SHFileOperationW with FOF_ALLOWUNDO. Both structs are blittable (IntPtr fields, string marshalled by
+    /// hand) so the P/Invoke needs no runtime marshalling and stays AOT-safe. shellapi.h wraps the struct in
+    /// #pragma pack(1) unless _WIN64 is defined, so the 32-bit layout is a separate declaration: with the
+    /// 64-bit one, a win-x86 build reads fAnyOperationsAborted two bytes past where the shell writes it and
+    /// would report a delete the user declined as done. The publish scripts all ship win-x86.
     /// </summary>
     [SupportedOSPlatform("windows")]
     private static class WindowsRecycleBin
@@ -290,6 +361,7 @@ public sealed class TrashService : ITrashService
         private const ushort FOF_ALLOWUNDO = 0x0040;
         private const ushort FOF_NOERRORUI = 0x0400;
         private const ushort FOF_WANTNUKEWARNING = 0x4000;
+        private const ushort DeleteFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI | FOF_WANTNUKEWARNING;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct SHFILEOPSTRUCTW
@@ -304,8 +376,24 @@ public sealed class TrashService : ITrashService
             public IntPtr lpszProgressTitle;
         }
 
+        [StructLayout(LayoutKind.Sequential, Pack = 1)]
+        private struct SHFILEOPSTRUCTW32
+        {
+            public IntPtr hwnd;
+            public uint wFunc;
+            public IntPtr pFrom;
+            public IntPtr pTo;
+            public ushort fFlags;
+            public int fAnyOperationsAborted;
+            public IntPtr hNameMappings;
+            public IntPtr lpszProgressTitle;
+        }
+
         [DllImport("shell32.dll", EntryPoint = "SHFileOperationW", ExactSpelling = true)]
         private static extern int SHFileOperationW(ref SHFILEOPSTRUCTW lpFileOp);
+
+        [DllImport("shell32.dll", EntryPoint = "SHFileOperationW", ExactSpelling = true)]
+        private static extern int SHFileOperationW32(ref SHFILEOPSTRUCTW32 lpFileOp);
 
         public static void Delete(string fullPath)
         {
@@ -313,20 +401,16 @@ public sealed class TrashService : ITrashService
             var from = Marshal.StringToHGlobalUni(fullPath + "\0");
             try
             {
-                var operation = new SHFILEOPSTRUCTW
-                {
-                    wFunc = FO_DELETE,
-                    pFrom = from,
-                    fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI | FOF_WANTNUKEWARNING
-                };
+                var (result, aborted) = Environment.Is64BitProcess
+                    ? DeleteWide(from)
+                    : DeleteNarrow(from);
 
-                var result = SHFileOperationW(ref operation);
                 if (result != 0)
                 {
                     throw new IOException($"The recycle bin refused '{fullPath}' (SHFileOperation error 0x{result:X}).", result);
                 }
 
-                if (operation.fAnyOperationsAborted != 0)
+                if (aborted)
                 {
                     throw new OperationCanceledException("Moving to the recycle bin was aborted.");
                 }
@@ -335,6 +419,20 @@ public sealed class TrashService : ITrashService
             {
                 Marshal.FreeHGlobal(from);
             }
+        }
+
+        private static (int Result, bool Aborted) DeleteWide(IntPtr from)
+        {
+            var operation = new SHFILEOPSTRUCTW { wFunc = FO_DELETE, pFrom = from, fFlags = DeleteFlags };
+            var result = SHFileOperationW(ref operation);
+            return (result, operation.fAnyOperationsAborted != 0);
+        }
+
+        private static (int Result, bool Aborted) DeleteNarrow(IntPtr from)
+        {
+            var operation = new SHFILEOPSTRUCTW32 { wFunc = FO_DELETE, pFrom = from, fFlags = DeleteFlags };
+            var result = SHFileOperationW32(ref operation);
+            return (result, operation.fAnyOperationsAborted != 0);
         }
     }
 }
