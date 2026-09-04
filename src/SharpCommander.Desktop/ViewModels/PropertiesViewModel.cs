@@ -99,6 +99,11 @@ public sealed partial class PropertiesViewModel : ObservableObject
             var sizeTask = _fileSystemService.GetDirectorySizeAsync(FullPath, progress, cts.Token);
             var countTask = Task.Run(() => CountItems(FullPath, cts.Token), cts.Token);
 
+            // Awaited together so both outcomes are observed: awaiting them in sequence left the second task's
+            // exception unobserved whenever the first one faulted (a folder whose root cannot be enumerated
+            // fails both), which surfaced later as a spurious "Unobserved task exception" in the log.
+            await Task.WhenAll(sizeTask, countTask);
+
             var size = await sizeTask;
             var (files, folders) = await countTask;
 

@@ -85,7 +85,7 @@ public sealed class FakeDialogService : IDialogService
         return Task.FromResult(InputAnswer);
     }
 
-    public Task<bool> ShowConfirmAsync(string title, string message, string confirmText = "OK", string cancelText = "Cancel", bool destructive = false)
+    public Task<bool> ShowConfirmAsync(string title, string message, string confirmText = "OK", string cancelText = "Cancel", bool destructive = false, bool defaultIsCancel = false)
     {
         Calls.Add("confirm:" + title);
         return Task.FromResult(ConfirmAnswer);

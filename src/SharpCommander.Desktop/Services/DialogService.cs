@@ -121,14 +121,14 @@ public sealed class DialogService : IDialogService
         return accepted ? dialog.Result : null;
     });
 
-    public Task<bool> ShowConfirmAsync(string title, string message, string confirmText = "OK", string cancelText = "Cancel", bool destructive = false) => OnUiThreadAsync(async () =>
+    public Task<bool> ShowConfirmAsync(string title, string message, string confirmText = "OK", string cancelText = "Cancel", bool destructive = false, bool defaultIsCancel = false) => OnUiThreadAsync(async () =>
     {
         if (_ownerProvider() is not { } owner)
         {
             return false;
         }
 
-        var dialog = new ConfirmDialog(title, message, confirmText, cancelText, destructive);
+        var dialog = new ConfirmDialog(title, message, confirmText, cancelText, destructive, defaultIsCancel);
         return await dialog.ShowDialog<bool>(owner);
     });
 

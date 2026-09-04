@@ -38,10 +38,13 @@
     <Border Padding="24">
         <DockPanel>
             <!-- Close Button -->
-            <Button DockPanel.Dock="Bottom"
+            <Button x:Name="CloseButton"
+                    DockPanel.Dock="Bottom"
                     Content="Close"
                     HorizontalAlignment="Right"
                     Padding="24,8"
+                    IsDefault="True"
+                    IsCancel="True"
                     Click="Close_Click" />
 
             <ScrollViewer>

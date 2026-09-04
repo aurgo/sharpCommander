@@ -29,7 +29,11 @@ public interface IDialogService
     Task<string?> ShowInputDialogAsync(string title, string prompt, string initialValue = "", Func<string, string?>? validate = null);
 
     /// <summary>Asks a yes/no question. <paramref name="destructive"/> styles the confirm button as dangerous.</summary>
-    Task<bool> ShowConfirmAsync(string title, string message, string confirmText = "OK", string cancelText = "Cancel", bool destructive = false);
+    /// <param name="defaultIsCancel">
+    /// Arms the cancel button instead of the confirm one, for a prompt that follows another confirmation and
+    /// could otherwise be answered by a still-repeating Enter.
+    /// </param>
+    Task<bool> ShowConfirmAsync(string title, string message, string confirmText = "OK", string cancelText = "Cancel", bool destructive = false, bool defaultIsCancel = false);
 
     /// <summary>
     /// Confirms deleting <paramref name="items"/>. Trash is the default choice when <paramref name="trashAvailable"/>;

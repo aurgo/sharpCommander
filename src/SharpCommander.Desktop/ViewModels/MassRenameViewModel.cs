@@ -406,7 +406,12 @@ public sealed partial class MassRenameViewModel : ObservableObject
                 continue;
             }
 
-            if (!currentPaths.Contains(item.TargetPath) && _fileSystemService.Exists(item.TargetPath))
+            // A case-only rename targets the entry itself, so an existing target is that same entry. Testing
+            // Exists would refuse it on a case-insensitive volume mounted on Linux, exactly as it did in
+            // FileSystemService.Rename.
+            var caseOnlyRename = string.Equals(item.OldName, item.NewName, StringComparison.OrdinalIgnoreCase);
+
+            if (!caseOnlyRename && !currentPaths.Contains(item.TargetPath) && _fileSystemService.Exists(item.TargetPath))
             {
                 item.SetStatus(RenameStatus.TargetExists, "An item with this name already exists");
                 conflicts++;

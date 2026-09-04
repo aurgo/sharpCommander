@@ -302,9 +302,14 @@ public sealed class FileSystemService : IFileSystemService
 
         var newPath = Path.Combine(parent, newName);
 
-        // On case-insensitive platforms a name that differs only by case is the same entry and may be renamed.
-        var sameEntry = PathUtils.AreSamePath(fullPath, newPath);
-        if (!sameEntry && (File.Exists(newPath) || Directory.Exists(newPath)))
+        // A name that differs only by case is a case-only rename of the same entry, whatever the platform
+        // comparison says: the mount decides, not the OS. Testing Exists here would refuse it on a
+        // case-insensitive volume mounted on Linux (vfat, exFAT, NTFS-3g, a casefold directory), where the
+        // comparison is ordinal but the kernel resolves both names to the same file. File.Move and
+        // Directory.Move perform the rename on either kind of file system and still refuse to clobber a
+        // genuinely different entry.
+        var caseOnlyRename = string.Equals(Path.GetFileName(fullPath), newName, StringComparison.OrdinalIgnoreCase);
+        if (!caseOnlyRename && (File.Exists(newPath) || Directory.Exists(newPath)))
         {
             throw new FileOperationException(FileOperationErrorKind.TargetExists, newPath, $"'{newName}' already exists in this folder.");
         }

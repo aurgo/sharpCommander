@@ -201,6 +201,15 @@ public sealed partial class FileOperationsService : ObservableObject, IFileOpera
             return WorkItem.Invalid(sourcePath, $"'{name}' no longer exists.");
         }
 
+        // A volume root has no name of its own, so Path.Combine(destination, "") would be the destination folder
+        // itself and the whole volume would be merged into it without so much as a prompt. Drives reach this
+        // through F5/F6 and drag and drop from the Computer view, which (unlike delete and the clipboard) do not
+        // filter them out.
+        if (PathUtils.IsVolumeRoot(sourcePath))
+        {
+            return WorkItem.Invalid(sourcePath, $"Cannot {verb} a whole drive. Open it and select what to {verb}.");
+        }
+
         var target = Path.Combine(destinationPath, name);
         if (PathUtils.AreSamePath(sourcePath, target))
         {
@@ -331,7 +340,10 @@ public sealed partial class FileOperationsService : ObservableObject, IFileOpera
             $"'{name}' could not be moved to the trash:\n{trashError.Message}\n\nDelete it permanently instead? This cannot be undone.",
             "Delete permanently",
             "Skip",
-            destructive: true);
+            destructive: true,
+            // This prompt follows the delete confirmation the user just answered with Enter, and on Linux
+            // without gio it appears within milliseconds; Skip is armed so a repeating Enter cannot delete.
+            defaultIsCancel: true);
 
         if (!confirmed)
         {

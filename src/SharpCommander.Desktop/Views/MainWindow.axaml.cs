@@ -266,11 +266,24 @@ public partial class MainWindow : Window
     {
         if (!e.Handled && _viewModel is { } viewModel)
         {
+            var editing = IsTextEditorFocused();
+
             foreach (var (gesture, resolve) in ShortcutMap)
             {
                 if (!gesture.Matches(e))
                 {
                     continue;
+                }
+
+                // The clipboard and select-all gestures belong to the text box while the user is typing in one.
+                // The design note above assumes the focused control consumes them first, which only holds when
+                // the gesture is the platform's own: on macOS a TextBox consumes Cmd+A/C/V/X and lets the Ctrl
+                // aliases bubble, so without this a Ctrl+V meant for the path box would paste files into the
+                // folder instead. Only these four are skipped; Ctrl+F and the rest still toggle their panel
+                // feature from inside the box they act on.
+                if (editing && IsTextEditingGesture(gesture))
+                {
+                    break;
                 }
 
                 var command = resolve(viewModel);
@@ -285,6 +298,27 @@ public partial class MainWindow : Window
         }
 
         base.OnKeyDown(e);
+    }
+
+    /// <summary>
+    /// The gestures a text box implements itself, and which therefore must not act on files while one has focus.
+    /// </summary>
+    private static bool IsTextEditingGesture(KeyGesture gesture)
+    {
+        return gesture.Key is Key.A or Key.C or Key.V or Key.X
+               && (gesture.KeyModifiers & ~(KeyModifiers.Control | KeyModifiers.Meta)) == KeyModifiers.None;
+    }
+
+    /// <summary>
+    /// True when the keyboard focus is inside a control that edits text, so the letter shortcuts belong to it.
+    /// The path box is an AutoCompleteBox, whose editor is a TextBox in its template, hence the ancestor walk.
+    /// </summary>
+    private bool IsTextEditorFocused()
+    {
+        var focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement();
+
+        return focused is TextBox
+               || (focused as Visual)?.FindAncestorOfType<AutoCompleteBox>() is not null;
     }
 
     // ---- panels and tabs --------------------------------------------------------------------------------
@@ -328,8 +362,20 @@ public partial class MainWindow : Window
 
     private void Favorites_KeyDown(object? sender, KeyEventArgs e)
     {
-        if (FavoritesListBox.SelectedItem is not FavoriteItem favorite || _viewModel is not { } viewModel)
+        if (_viewModel is not { } viewModel)
         {
+            return;
+        }
+
+        // A click navigates and then clears the selection, but keyboard focus stays on the clicked row, so
+        // SelectedItem alone would miss the favorite the user is actually looking at and Delete would fall
+        // through to the window and delete files in the panel instead.
+        var favorite = FavoritesListBox.SelectedItem as FavoriteItem ?? FavoriteFromSource(e.Source);
+        if (favorite is null)
+        {
+            // Still claim the keys while the favorites list has focus: a stray Delete must never reach the
+            // file shortcut of the window.
+            e.Handled = e.Key is Key.Enter or Key.Delete;
             return;
         }
 

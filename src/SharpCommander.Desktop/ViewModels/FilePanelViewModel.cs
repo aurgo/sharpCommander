@@ -247,7 +247,12 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
             ? _selectedEntries
             : SelectedEntry is { } current ? [current] : [];
 
-        return items.Where(item => item.EntryType != FileSystemEntryType.ParentDirectory).ToList();
+        // Only real entries: "..", and the drives of the Computer view, are not things an operation can act on.
+        // The Computer view auto-selects the first drive, so without this a stray F5/F6 or drag would hand a
+        // volume root to the operations service.
+        return items
+            .Where(item => item.EntryType is FileSystemEntryType.File or FileSystemEntryType.Directory)
+            .ToList();
     }
 
     /// <summary>Selects the entry with the given full path, reveals it and returns true when it is listed.</summary>

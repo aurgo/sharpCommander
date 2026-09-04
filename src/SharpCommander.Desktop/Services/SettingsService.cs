@@ -250,13 +250,79 @@ public sealed class SettingsService : ISettingsService
 
         Add("Desktop", Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
         Add("Documents", Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
-        Add("Downloads", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"));
+        Add("Downloads", GetDownloadsDirectory());
         Add("Pictures", Environment.GetFolderPath(Environment.SpecialFolder.MyPictures));
         Add("Music", Environment.GetFolderPath(Environment.SpecialFolder.MyMusic));
         Add("Videos", Environment.GetFolderPath(Environment.SpecialFolder.MyVideos));
         Add("Home", Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
 
         return favorites;
+    }
+
+    /// <summary>
+    /// The user's downloads folder. Every other system favorite has an <see cref="Environment.SpecialFolder"/>,
+    /// but downloads does not, so on Linux the XDG user-dirs configuration is read: a localized setup points
+    /// XDG_DOWNLOAD_DIR at "Descargas", "Téléchargements" or "Downloads" depending on the install language, and
+    /// assuming the English name silently dropped the favorite.
+    /// </summary>
+    private static string GetDownloadsDirectory()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+        if (OperatingSystem.IsLinux() && ReadXdgUserDirectory("XDG_DOWNLOAD_DIR", home) is { } configured)
+        {
+            return configured;
+        }
+
+        return Path.Combine(home, "Downloads");
+    }
+
+    /// <summary>
+    /// Reads one entry from the freedesktop user-dirs file, which holds lines of the form
+    /// XDG_DOWNLOAD_DIR="$HOME/Descargas". Returns null when the file, the entry or the folder is missing.
+    /// </summary>
+    private static string? ReadXdgUserDirectory(string key, string home)
+    {
+        try
+        {
+            var configHome = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+            var configDirectory = string.IsNullOrWhiteSpace(configHome) ? Path.Combine(home, ".config") : configHome;
+            var file = Path.Combine(configDirectory, "user-dirs.dirs");
+
+            if (!File.Exists(file))
+            {
+                return null;
+            }
+
+            foreach (var line in File.ReadLines(file))
+            {
+                var text = line.AsSpan().Trim();
+                if (text.IsEmpty || text[0] == '#' || !text.StartsWith(key, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var separator = text.IndexOf('=');
+                if (separator < 0)
+                {
+                    continue;
+                }
+
+                var value = text[(separator + 1)..].Trim().Trim('"').ToString();
+                if (value.StartsWith("$HOME", StringComparison.Ordinal))
+                {
+                    value = home + value["$HOME".Length..];
+                }
+
+                return value.Length > 0 && Directory.Exists(value) ? value : null;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // An unreadable user-dirs file just means the default is used.
+        }
+
+        return null;
     }
 
     // ---- reading ----------------------------------------------------------------------------------------

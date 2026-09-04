@@ -191,7 +191,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             "A file operation is still running. Cancel it and quit?",
             confirmText: "Cancel and quit",
             cancelText: "Keep working",
-            destructive: true);
+            destructive: true,
+            // Losing an in-flight copy to a stray Enter is not recoverable; keep working is the armed answer.
+            defaultIsCancel: true);
     }
 
     /// <summary>Saves the state and flushes any pending settings write; await it before closing the window.</summary>
