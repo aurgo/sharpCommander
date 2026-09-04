@@ -1,0 +1,16 @@
+<Project>
+  <!-- Single source of truth for version and metadata (L11). -->
+  <PropertyGroup>
+    <Version>2.1.0</Version>
+    <Authors>AURGO</Authors>
+    <Company>AURGO</Company>
+    <Product>SharpCommander</Product>
+    <Copyright>Copyright © AURGO 2009-2026</Copyright>
+    <RepositoryUrl>https://github.com/aurgo/sharpCommander</RepositoryUrl>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+</Project>

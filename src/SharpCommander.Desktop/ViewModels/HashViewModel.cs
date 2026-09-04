@@ -1,16 +1,30 @@
+using System.Buffers;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
-using Avalonia;
-using Avalonia.Controls.ApplicationLifetimes;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
 namespace SharpCommander.Desktop.ViewModels;
 
-public partial class HashViewModel : ObservableObject
+/// <summary>
+/// Computes MD5, SHA-1, SHA-256 and SHA-512 of a file in a single pass with a 1 MiB buffer. The calculation
+/// starts with <see cref="StartAsync"/> (called once the window is visible), reports progress and can be
+/// cancelled. Results are assigned on the thread that called <see cref="StartAsync"/>.
+/// </summary>
+public sealed partial class HashViewModel : ObservableObject
 {
-    [ObservableProperty]
-    private string _filePath = string.Empty;
+    private const int BufferSize = 1024 * 1024;
+    private static readonly TimeSpan ProgressInterval = TimeSpan.FromMilliseconds(50);
+
+    private CancellationTokenSource? _cts;
+    private bool _started;
+
+    /// <summary>Gets the file being hashed.</summary>
+    public string FilePath { get; }
+
+    /// <summary>Gets the file name without its directory.</summary>
+    public string FileName => Path.GetFileName(FilePath);
 
     [ObservableProperty]
     private string _md5 = string.Empty;
@@ -22,6 +36,10 @@ public partial class HashViewModel : ObservableObject
     private string _sha256 = string.Empty;
 
     [ObservableProperty]
+    private string _sha512 = string.Empty;
+
+    /// <summary>All hashes as a text block ready to paste.</summary>
+    [ObservableProperty]
     private string _allHashes = string.Empty;
 
     [ObservableProperty]
@@ -31,93 +49,154 @@ public partial class HashViewModel : ObservableObject
     private bool _hasError;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
     private bool _isCalculating;
+
+    [ObservableProperty]
+    private bool _hasResults;
+
+    /// <summary>Percentage of the file read so far.</summary>
+    [ObservableProperty]
+    private double _progressPercent;
+
+    [ObservableProperty]
+    private string _statusText = string.Empty;
 
     public HashViewModel(string filePath)
     {
+        ArgumentException.ThrowIfNullOrEmpty(filePath);
         FilePath = filePath;
-        _ = CalculateHashesAsync();
     }
 
-    private async Task CalculateHashesAsync()
+    /// <summary>
+    /// Computes the four hashes. Never throws: failures end up in <see cref="ErrorMessage"/>. A second call is
+    /// ignored.
+    /// </summary>
+    public async Task StartAsync()
     {
-        if (string.IsNullOrEmpty(FilePath) || !File.Exists(FilePath))
+        if (_started)
         {
-            HasError = true;
-            ErrorMessage = "File not found.";
             return;
         }
 
+        _started = true;
+
+        if (!File.Exists(FilePath))
+        {
+            Fail("File not found.");
+            return;
+        }
+
+        using var cts = new CancellationTokenSource();
+        _cts = cts;
+        IsCalculating = true;
+        HasError = false;
+        StatusText = "Calculating...";
+
+        // Progress<T> posts to the synchronization context captured here, i.e. the UI thread.
+        var progress = new Progress<double>(percent =>
+        {
+            ProgressPercent = percent;
+            StatusText = $"Calculating... {percent:0}%";
+        });
+
         try
         {
-            IsCalculating = true;
-            HasError = false;
+            var result = await Task.Run(() => ComputeAsync(FilePath, progress, cts.Token), cts.Token);
 
-            await Task.Run(() =>
-            {
-                using var md5 = MD5.Create();
-                using var sha1 = SHA1.Create();
-                using var sha256 = SHA256.Create();
-                using var stream = File.OpenRead(FilePath);
-
-                const int BufferSize = 8192;
-                var buffer = new byte[BufferSize];
-                int bytesRead;
-
-                while ((bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
-                {
-                    md5.TransformBlock(buffer, 0, bytesRead, null, 0);
-                    sha1.TransformBlock(buffer, 0, bytesRead, null, 0);
-                    sha256.TransformBlock(buffer, 0, bytesRead, null, 0);
-                }
-
-                md5.TransformFinalBlock(buffer, 0, 0);
-                sha1.TransformFinalBlock(buffer, 0, 0);
-                sha256.TransformFinalBlock(buffer, 0, 0);
-
-                Md5 = BitConverter.ToString(md5.Hash!).Replace("-", "");
-                Sha1 = BitConverter.ToString(sha1.Hash!).Replace("-", "");
-                Sha256 = BitConverter.ToString(sha256.Hash!).Replace("-", "");
-
-                var sb = new StringBuilder();
-                sb.AppendLine($"File: {FilePath}");
-                sb.AppendLine();
-                sb.AppendLine($"MD5: {Md5}");
-                sb.AppendLine($"SHA1: {Sha1}");
-                sb.AppendLine($"SHA256: {Sha256}");
-
-                AllHashes = sb.ToString();
-            });
+            Md5 = result.Md5;
+            Sha1 = result.Sha1;
+            Sha256 = result.Sha256;
+            Sha512 = result.Sha512;
+            AllHashes = FormatAll(result);
+            ProgressPercent = 100;
+            HasResults = true;
+            StatusText = "Done";
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = "Cancelled";
         }
         catch (Exception ex)
         {
-            HasError = true;
-            ErrorMessage = $"Error calculating hashes: {ex.Message}";
+            Fail($"Error calculating hashes: {ex.Message}");
         }
         finally
         {
+            _cts = null;
             IsCalculating = false;
         }
     }
 
-    [RelayCommand]
-    private void Close()
+    /// <summary>Stops the calculation. Safe to call when nothing is running.</summary>
+    [RelayCommand(CanExecute = nameof(IsCalculating))]
+    public void Cancel()
     {
-        // This command will be bound to the window close action
+        _cts?.Cancel();
     }
 
-    [RelayCommand]
-    private async Task CopyHashAsync(string? hashValue)
+    private void Fail(string message)
     {
-        if (string.IsNullOrEmpty(hashValue)) return;
-        
-        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        HasError = true;
+        ErrorMessage = message;
+        StatusText = "Failed";
+    }
+
+    private string FormatAll(HashResult result)
+    {
+        var builder = new StringBuilder();
+        builder.Append("File: ").AppendLine(FilePath);
+        builder.Append("MD5: ").AppendLine(result.Md5);
+        builder.Append("SHA-1: ").AppendLine(result.Sha1);
+        builder.Append("SHA-256: ").AppendLine(result.Sha256);
+        builder.Append("SHA-512: ").Append(result.Sha512);
+        return builder.ToString();
+    }
+
+    private static async Task<HashResult> ComputeAsync(string path, IProgress<double> progress, CancellationToken token)
+    {
+        using var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
+        using var sha1 = IncrementalHash.CreateHash(HashAlgorithmName.SHA1);
+        using var sha256 = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        using var sha512 = IncrementalHash.CreateHash(HashAlgorithmName.SHA512);
+
+        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.SequentialScan | FileOptions.Asynchronous);
+
+        var total = stream.Length;
+        long done = 0;
+        var lastReport = Stopwatch.StartNew();
+        var buffer = ArrayPool<byte>.Shared.Rent(BufferSize);
+
+        try
         {
-            var clipboard = desktop.MainWindow?.Clipboard;
-            if (clipboard != null)
+            int read;
+            while ((read = await stream.ReadAsync(buffer.AsMemory(0, BufferSize), token).ConfigureAwait(false)) > 0)
             {
-                await clipboard.SetTextAsync(hashValue);
+                md5.AppendData(buffer, 0, read);
+                sha1.AppendData(buffer, 0, read);
+                sha256.AppendData(buffer, 0, read);
+                sha512.AppendData(buffer, 0, read);
+
+                done += read;
+                if (lastReport.Elapsed >= ProgressInterval)
+                {
+                    progress.Report(total > 0 ? done * 100.0 / total : 100);
+                    lastReport.Restart();
+                }
             }
         }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+
+        return new HashResult(Hex(md5), Hex(sha1), Hex(sha256), Hex(sha512));
     }
+
+    private static string Hex(IncrementalHash hash)
+    {
+        return Convert.ToHexStringLower(hash.GetHashAndReset());
+    }
+
+    private readonly record struct HashResult(string Md5, string Sha1, string Sha256, string Sha512);
 }

@@ -1,5 +1,12 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Styles.Resources>
+        <!-- Dialog accent colors (destructive actions and validation errors). -->
+        <SolidColorBrush x:Key="DangerBrush" Color="#DC3545" />
+        <SolidColorBrush x:Key="DangerHoverBrush" Color="#C82333" />
+        <SolidColorBrush x:Key="DangerPressedBrush" Color="#A71D2A" />
+    </Styles.Resources>
     
     <!-- Panel Styles -->
     <Style Selector="Border.file-panel">
@@ -11,11 +18,53 @@
         <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundAltHighBrush}" />
     </Style>
     
-    <!-- Header Styles -->
+    <!-- Header Styles. The active panel (where F5/F6 act) gets an accent underline. -->
     <Style Selector="Border.panel-header">
         <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundChromeMediumBrush}" />
         <Setter Property="CornerRadius" Value="8,8,0,0" />
         <Setter Property="Padding" Value="8,6" />
+        <Setter Property="BorderThickness" Value="0,0,0,2" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+
+    <Style Selector="Border.panel-header.active">
+        <Setter Property="BorderBrush" Value="{DynamicResource SystemAccentColor}" />
+    </Style>
+
+    <!-- Column headers above the file list -->
+    <Style Selector="Grid.column-headers">
+        <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}" />
+    </Style>
+
+    <Style Selector="Button.column-header">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="0" />
+        <Setter Property="Padding" Value="4,3" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+    </Style>
+
+    <Style Selector="Button.column-header:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SystemControlHighlightListLowBrush}" />
+    </Style>
+
+    <!-- File list rows are denser than the Fluent default, and the list lights up while files hover over it. -->
+    <Style Selector="ListBox.file-list ListBoxItem">
+        <Setter Property="Padding" Value="8,3" />
+        <Setter Property="MinHeight" Value="0" />
+    </Style>
+
+    <Style Selector="ListBox.file-list">
+        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+
+    <Style Selector="ListBox.file-list.drop-target">
+        <Setter Property="BorderBrush" Value="{DynamicResource SystemAccentColor}" />
+        <Setter Property="Background" Value="{DynamicResource SystemControlHighlightListLowBrush}" />
     </Style>
     
     <Style Selector="TextBlock.panel-title">
@@ -81,6 +130,54 @@
         <Setter Property="BorderThickness" Value="0,0,1,0" />
         <Setter Property="BorderBrush" Value="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" />
     </Style>
+
+    <Style Selector="ListBox.favorites-list ListBoxItem">
+        <Setter Property="Padding" Value="8,4" />
+        <Setter Property="MinHeight" Value="0" />
+    </Style>
+
+    <!-- Tab strip above the panels -->
+    <Style Selector="Border.tab-bar">
+        <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}" />
+        <Setter Property="Padding" Value="4,0" />
+    </Style>
+
+    <Style Selector="TabStripItem">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Padding" Value="10,4" />
+        <Setter Property="MinHeight" Value="30" />
+        <Setter Property="Margin" Value="0" />
+    </Style>
+
+    <Style Selector="Button.tab-close">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="3" />
+        <Setter Property="Width" Value="18" />
+        <Setter Property="Height" Value="18" />
+        <Setter Property="CornerRadius" Value="9" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector="Button.tab-close:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SystemControlHighlightListLowBrush}" />
+    </Style>
+
+    <Style Selector="Button.tab-add">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="6,2" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="FontSize" Value="16" />
+    </Style>
+
+    <!-- Main window status bar: message on the left, operation progress on the right -->
+    <Style Selector="Border.main-status-bar">
+        <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}" />
+        <Setter Property="Padding" Value="12,4" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+        <Setter Property="BorderBrush" Value="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" />
+    </Style>
     
     <!-- Status Bar Styles -->
     <Style Selector="Border.status-bar">
@@ -137,6 +234,62 @@
     <Style Selector="Window.dialog">
         <Setter Property="SizeToContent" Value="WidthAndHeight" />
         <Setter Property="CanResize" Value="False" />
+    </Style>
+
+    <Style Selector="TextBlock.dialog-title">
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style Selector="TextBlock.dialog-message">
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style Selector="TextBlock.dialog-secondary">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Opacity" Value="0.75" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style Selector="TextBlock.dialog-error">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style Selector="Button.dialog-button">
+        <Setter Property="MinWidth" Value="90" />
+        <Setter Property="Padding" Value="16,6" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+    </Style>
+
+    <!-- Destructive buttons (delete, overwrite) are red in every state. -->
+    <Style Selector="Button.destructive">
+        <Setter Property="Background" Value="{StaticResource DangerBrush}" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <Style Selector="Button.destructive:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource DangerHoverBrush}" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <Style Selector="Button.destructive:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource DangerPressedBrush}" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <Style Selector="TextBox.monospace">
+        <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,monospace" />
+    </Style>
+
+    <Style Selector="TextBlock.monospace">
+        <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,monospace" />
+    </Style>
+
+    <Style Selector="SelectableTextBlock.monospace">
+        <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,monospace" />
     </Style>
     
 </Styles>

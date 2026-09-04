@@ -1,36 +1,41 @@
 #!/bin/bash
-# Creates a temporary .app bundle and launches SharpCommander with a proper
-# macOS Dock icon. This is needed because 'dotnet run' doesn't create a
-# .app bundle, and macOS requires one for the Dock icon.
+# Builds SharpCommander (Debug) and launches it from a temporary .app bundle so macOS shows the proper Dock
+# icon and application name. 'dotnet run' does not create a bundle, and macOS reads Info.plist and icon.icns
+# only from one.
 #
-# The trick: the native .NET host (SharpCommander.Desktop) is a Mach-O binary.
-# By symlinking the entire output dir as Contents/MacOS, macOS launches the
-# native host FROM WITHIN the bundle, so NSBundle.mainBundle reads our
-# Info.plist and icon.icns correctly.
+# The trick: the native .NET host (SharpCommander.Desktop) is a Mach-O binary. By symlinking the entire
+# output directory as Contents/MacOS, macOS launches the native host FROM WITHIN the bundle, so
+# NSBundle.mainBundle reads our Info.plist and icon.icns correctly.
+#
+# Release builds for distribution are made by publish.sh, which produces a real SharpCommander.app.
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$SCRIPT_DIR/src/SharpCommander.Desktop"
-OUTPUT_DIR="$PROJECT_DIR/bin/Debug/net8.0"
-BUNDLE_DIR="/tmp/SharpCommander.app"
+PROJECT_FILE="$PROJECT_DIR/SharpCommander.Desktop.csproj"
+
+# The target framework comes from the project file so this script does not go stale when it changes.
+TFM=$(grep -o '<TargetFramework>[^<]*</TargetFramework>' "$PROJECT_FILE" | head -n 1 | sed -E 's#</?TargetFramework>##g' || true)
+if [ -z "$TFM" ]; then
+    echo "ERROR: no <TargetFramework> element found in $PROJECT_FILE" >&2
+    exit 1
+fi
+
+OUTPUT_DIR="$PROJECT_DIR/bin/Debug/$TFM"
+BUNDLE_DIR="${TMPDIR:-/tmp}/SharpCommander.app"
 
 # Build first
-echo "Building SharpCommander..."
-dotnet build "$PROJECT_DIR/SharpCommander.Desktop.csproj"
-
-# Copy icns to output if not there
-if [ ! -f "$OUTPUT_DIR/icon.icns" ] && [ -f "$PROJECT_DIR/Resources/icon.icns" ]; then
-    cp "$PROJECT_DIR/Resources/icon.icns" "$OUTPUT_DIR/icon.icns"
-fi
+echo "Building SharpCommander ($TFM)..."
+dotnet build "$PROJECT_FILE"
 
 # Create .app bundle structure
 rm -rf "$BUNDLE_DIR"
 mkdir -p "$BUNDLE_DIR/Contents/Resources"
 
-# Copy Info.plist and icon
-cp "$OUTPUT_DIR/Info.plist" "$BUNDLE_DIR/Contents/Info.plist"
-cp "$OUTPUT_DIR/icon.icns" "$BUNDLE_DIR/Contents/Resources/icon.icns"
+# Info.plist and icon come straight from the project
+cp "$PROJECT_DIR/Info.plist" "$BUNDLE_DIR/Contents/Info.plist"
+cp "$PROJECT_DIR/Resources/icon.icns" "$BUNDLE_DIR/Contents/Resources/icon.icns"
 
 # Symlink the entire output directory as MacOS so the native host
 # runs from within the bundle (NSBundle.mainBundle works correctly)

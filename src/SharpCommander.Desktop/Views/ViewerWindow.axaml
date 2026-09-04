@@ -1,0 +1,63 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:sys="using:System"
+        xmlns:vm="using:SharpCommander.Desktop.ViewModels"
+        x:Class="SharpCommander.Desktop.Views.ViewerWindow"
+        x:DataType="vm:ViewerViewModel"
+        Title="{Binding FileName, StringFormat='{}{0} - Viewer'}"
+        Width="900" Height="650"
+        MinWidth="480" MinHeight="300"
+        WindowStartupLocation="CenterOwner">
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Classes="toolbar">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="6">
+                <TextBlock Grid.Column="0"
+                           Text="{Binding FilePath}"
+                           ToolTip.Tip="{Binding FilePath}"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center"
+                           Margin="4,0,12,0" />
+                <TextBox Grid.Column="1"
+                         Name="FindBox"
+                         Width="240"
+                         Watermark="Find (Ctrl+F)"
+                         Text="{Binding FindText}"
+                         IsEnabled="{Binding !IsBinary}"
+                         KeyDown="FindBox_KeyDown" />
+                <Button Grid.Column="2" Content="Next" Command="{Binding FindNextCommand}" ToolTip.Tip="Next match (F3)" />
+                <TextBlock Grid.Column="3" Text="{Binding FindStatus}" Classes="dialog-secondary" VerticalAlignment="Center" MinWidth="60" />
+                <CheckBox Grid.Column="4" Content="Wrap lines" IsChecked="{Binding WordWrap}" IsEnabled="{Binding !IsBinary}" Margin="8,0,4,0" />
+            </Grid>
+        </Border>
+
+        <Border DockPanel.Dock="Bottom" Classes="status-bar" CornerRadius="0">
+            <TextBlock Classes="status-text" Text="{Binding StatusText}" />
+        </Border>
+
+        <Panel>
+            <TextBox Name="TextView"
+                     IsVisible="{Binding !IsBinary}"
+                     Text="{Binding Text, Mode=OneWay}"
+                     IsReadOnly="True"
+                     AcceptsReturn="True"
+                     Classes="monospace"
+                     FontSize="13"
+                     TextWrapping="NoWrap"
+                     BorderThickness="0"
+                     CornerRadius="0" />
+
+            <ListBox Name="HexView"
+                     IsVisible="{Binding IsBinary}"
+                     ItemsSource="{Binding HexLines}"
+                     FontSize="13">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="sys:String">
+                        <TextBlock Classes="monospace" Text="{Binding}" />
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}" VerticalAlignment="Top" Height="4" />
+        </Panel>
+    </DockPanel>
+</Window>

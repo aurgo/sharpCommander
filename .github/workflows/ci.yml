@@ -1,0 +1,114 @@
+# Builds and tests SharpCommander on the three desktop platforms for every push and pull request on master.
+# A tag named v<version> additionally publishes the seven runtime identifiers with the csproj defaults
+# (self-contained, partially trimmed) through the repository's publish scripts and attaches the ZIP archives
+# to a GitHub release. The tag must match <Version> in Directory.Build.props.
+
+name: CI
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+
+jobs:
+  build-test:
+    name: Build and test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore SharpCommander.sln
+
+      - name: Build
+        run: dotnet build SharpCommander.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test SharpCommander.sln -c Release --no-build
+
+  publish:
+    name: Publish (${{ matrix.rid }})
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, rid: win-x64 }
+          - { os: windows-latest, rid: win-x86 }
+          - { os: windows-latest, rid: win-arm64 }
+          - { os: ubuntu-latest, rid: linux-x64 }
+          - { os: ubuntu-latest, rid: linux-arm64 }
+          - { os: macos-latest, rid: osx-x64 }
+          - { os: macos-latest, rid: osx-arm64 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Check that the tag matches Directory.Build.props
+        shell: bash
+        run: |
+          version=$(grep -o '<Version>[^<]*</Version>' Directory.Build.props | sed -E 's#</?Version>##g')
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$version" != "$tag" ]; then
+            echo "::error::Tag v$tag does not match <Version>$version</Version> in Directory.Build.props"
+            exit 1
+          fi
+
+      - name: Publish (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./publish.ps1 -Platform ${{ matrix.rid }}
+
+      - name: Publish (Linux and macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: ./publish.sh ${{ matrix.rid }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SharpCommander-${{ matrix.rid }}
+          path: publish/*.zip
+          if-no-files-found: error
+
+  release:
+    name: GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          fail_on_unmatched_files: true
+          generate_release_notes: true

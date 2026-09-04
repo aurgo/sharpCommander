@@ -1,46 +1,58 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:SharpCommander.Desktop.ViewModels"
+        xmlns:models="using:SharpCommander.Core.Models"
+        xmlns:util="using:SharpCommander.Desktop.Utilities"
         x:Class="SharpCommander.Desktop.Views.SearchWindow"
         x:DataType="vm:SearchViewModel"
         Title="Advanced Search"
-        Width="600" Height="500"
+        Width="680" Height="560"
+        MinWidth="480" MinHeight="380"
         WindowStartupLocation="CenterOwner">
 
-    <Border Padding="15">
+    <Border Padding="16">
         <DockPanel>
-            <StackPanel DockPanel.Dock="Top" Spacing="10">
-                <TextBlock Text="Search Path:" FontWeight="Bold" />
-                <TextBox Text="{Binding SearchPath}" />
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="8">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Search in:" VerticalAlignment="Center" />
+                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding SearchPath}" IsEnabled="{Binding !IsSearching}" />
 
-                <TextBlock Text="File Name Pattern (use * as wildcard):" FontWeight="Bold" />
-                <TextBox Text="{Binding FileNamePattern}" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="File name:" VerticalAlignment="Center" />
+                <TextBox Grid.Row="1" Grid.Column="1" Name="PatternBox" Text="{Binding FileNamePattern}" IsEnabled="{Binding !IsSearching}" Watermark="Pattern with * and ? (for example *.txt)" />
 
-                <TextBlock Text="Containing Text:" FontWeight="Bold" />
-                <TextBox Text="{Binding ContentPattern}" />
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Containing:" VerticalAlignment="Center" />
+                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding ContentPattern}" IsEnabled="{Binding !IsSearching}" Watermark="Text that the file must contain (optional)" />
 
-                <CheckBox Content="Use Regular Expressions" IsChecked="{Binding UseRegex}" />
+                <CheckBox Grid.Row="3" Grid.Column="1" Content="File name is a regular expression" IsChecked="{Binding UseRegex}" IsEnabled="{Binding !IsSearching}" />
+            </Grid>
 
-                <Button Content="Start Search" 
-                        Command="{Binding StartSearchCommand}" 
-                        IsEnabled="{Binding !IsSearching}"
-                        HorizontalAlignment="Right" />
-                
-                <Separator Height="20" />
-            </StackPanel>
+            <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,Auto" Margin="0,10,0,0">
+                <TextBlock Grid.Column="0" Text="{Binding StatusText}" Classes="dialog-secondary" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                    <Button Classes="dialog-button" Content="Start" Command="{Binding StartSearchCommand}" IsDefault="True" IsVisible="{Binding !IsSearching}" />
+                    <Button Classes="dialog-button" Content="Cancel" Command="{Binding CancelSearchCommand}" IsVisible="{Binding IsSearching}" />
+                    <Button Classes="dialog-button" Content="Go to" Command="{Binding ActivateResultCommand}" ToolTip.Tip="Show the selected result in the panel (Enter or double-click)" />
+                    <Button Classes="dialog-button" Content="Close" Click="Close_Click" IsCancel="True" />
+                </StackPanel>
+            </Grid>
 
-            <TextBlock DockPanel.Dock="Bottom" 
-                       Text="{Binding StatusText}" 
-                       Margin="0,10,0,0" 
-                       FontStyle="Italic" />
-
-            <ListBox ItemsSource="{Binding Results}">
+            <ListBox Name="ResultsList"
+                     Margin="0,12,0,0"
+                     ItemsSource="{Binding Results}"
+                     SelectedItem="{Binding SelectedResult}"
+                     BorderThickness="1"
+                     BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                     CornerRadius="4"
+                     DoubleTapped="ResultsList_DoubleTapped"
+                     KeyDown="ResultsList_KeyDown">
                 <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <StackPanel>
-                            <TextBlock Text="{Binding Name}" FontWeight="Bold" />
-                            <TextBlock Text="{Binding FullPath}" FontSize="10" Foreground="Gray" />
-                        </StackPanel>
+                    <DataTemplate x:DataType="models:FileSystemEntry">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                            <PathIcon Grid.Column="0" Width="16" Height="16" Data="{Binding EntryType, Converter={x:Static util:EntryIconConverter.Instance}}" />
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding FullPath}" Classes="dialog-secondary" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>

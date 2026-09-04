@@ -3,7 +3,8 @@ using SharpCommander.Core.Models;
 namespace SharpCommander.Core.Interfaces;
 
 /// <summary>
-/// Interface for managing user settings persistence.
+/// Persists the user settings. Mutating members schedule a debounced save through <see cref="RequestSave"/>;
+/// <see cref="SaveAsync"/> writes immediately and <see cref="FlushAsync"/> writes anything still pending.
 /// </summary>
 public interface ISettingsService
 {
@@ -13,14 +14,24 @@ public interface ISettingsService
     UserSettings Settings { get; }
 
     /// <summary>
-    /// Loads settings from storage.
+    /// Loads settings from storage. An unreadable file is kept as a backup and defaults are used.
     /// </summary>
     Task LoadAsync();
 
     /// <summary>
-    /// Saves settings to storage.
+    /// Saves the settings now, atomically, superseding any pending debounced save.
     /// </summary>
     Task SaveAsync();
+
+    /// <summary>
+    /// Schedules a save; bursts of requests are coalesced into one write shortly after the last request.
+    /// </summary>
+    void RequestSave();
+
+    /// <summary>
+    /// Writes a pending save immediately and waits for any write in progress. Call it before exiting.
+    /// </summary>
+    Task FlushAsync();
 
     /// <summary>
     /// Adds a favorite directory.
@@ -28,9 +39,19 @@ public interface ISettingsService
     Task AddFavoriteAsync(string path, string? name = null);
 
     /// <summary>
-    /// Removes a favorite directory.
+    /// Removes a favorite directory, system favorites included.
     /// </summary>
     Task RemoveFavoriteAsync(string path);
+
+    /// <summary>
+    /// Changes the display name of a favorite.
+    /// </summary>
+    Task RenameFavoriteAsync(string path, string newName);
+
+    /// <summary>
+    /// Puts the system favorites (Desktop, Documents, ...) back at the top of the list, keeping user favorites.
+    /// </summary>
+    Task RestoreDefaultFavoritesAsync();
 
     /// <summary>
     /// Checks if a path is in favorites.
@@ -38,7 +59,7 @@ public interface ISettingsService
     bool IsFavorite(string path);
 
     /// <summary>
-    /// Adds a path to navigation history.
+    /// Adds a path to navigation history (debounced save).
     /// </summary>
     Task AddToHistoryAsync(string path);
 

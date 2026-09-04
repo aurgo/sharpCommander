@@ -1,0 +1,23 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SharpCommander.Desktop.Views.DeleteConfirmDialog"
+        Title="Delete"
+        Width="480"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        ShowInTaskbar="False">
+    <Border Padding="20">
+        <StackPanel Spacing="10">
+            <TextBlock Name="HeadingText" Classes="dialog-title" />
+            <StackPanel Name="NamesPanel" Spacing="2" />
+            <TextBlock Name="MoreText" Classes="dialog-secondary" IsVisible="False" />
+            <TextBlock Name="HintText" Classes="dialog-secondary" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
+                <Button Name="TrashButton" Classes="dialog-button" Content="Move to Trash" Click="Trash_Click" />
+                <Button Name="PermanentButton" Classes="dialog-button destructive" Content="Delete permanently" Click="Permanent_Click" />
+                <Button Name="CancelButton" Classes="dialog-button" Content="Cancel" IsCancel="True" Click="Cancel_Click" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

@@ -24,4 +24,10 @@ public sealed class NavigationHistoryItem
     /// Gets or sets the visit count.
     /// </summary>
     public int VisitCount { get; set; } = 1;
+
+    /// <summary>
+    /// Returns <see cref="Path"/>, so controls that filter or complete on the text of an item (the path box's
+    /// AutoCompleteBox) work on the path rather than on the type name.
+    /// </summary>
+    public override string ToString() => Path;
 }

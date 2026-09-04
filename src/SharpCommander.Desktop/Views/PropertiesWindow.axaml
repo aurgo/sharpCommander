@@ -1,44 +1,79 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:models="using:SharpCommander.Core.Models"
+        xmlns:vm="using:SharpCommander.Desktop.ViewModels"
+        xmlns:util="using:SharpCommander.Desktop.Utilities"
         x:Class="SharpCommander.Desktop.Views.PropertiesWindow"
-        x:DataType="models:FileSystemEntry"
+        x:DataType="vm:PropertiesViewModel"
         Title="Properties"
-        Width="400" Height="450"
+        Width="480"
+        SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
-        CanResize="False">
+        CanResize="False"
+        ShowInTaskbar="False">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.label">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,4,16,4" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+        </Style>
+        <Style Selector="TextBlock.value">
+            <Setter Property="Margin" Value="0,4" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style Selector="SelectableTextBlock.value">
+            <Setter Property="Margin" Value="0,4" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+    </Window.Styles>
 
     <Border Padding="20">
         <DockPanel>
-            <Button DockPanel.Dock="Bottom" 
-                    Content="Close" 
-                    HorizontalAlignment="Right" 
-                    Click="Close_Click"
-                    Padding="20,8" />
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <Button Classes="dialog-button" Content="Close" Click="Close_Click" IsDefault="True" IsCancel="True" />
+            </StackPanel>
 
-            <StackPanel Spacing="15">
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                    <PathIcon Data="M13,9V3.5L18.5,9M6,2C4.89,2 4,2.89 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2H6Z" Width="32" Height="32" />
-                    <TextBlock Text="{Binding Name}" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <StackPanel Spacing="12">
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                    <PathIcon Width="36" Height="36" Data="{Binding EntryType, Converter={x:Static util:EntryIconConverter.Instance}}" />
+                    <StackPanel VerticalAlignment="Center">
+                        <SelectableTextBlock Text="{Binding Name}" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding TypeText}" Classes="dialog-secondary" />
+                    </StackPanel>
                 </StackPanel>
 
                 <Separator />
 
-                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" Margin="0,5">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Type:" FontWeight="Bold" Margin="0,5,15,5" />
-                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding EntryType}" Margin="0,5" />
+                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Location" />
+                    <SelectableTextBlock Grid.Row="0" Grid.Column="1" Classes="value" Text="{Binding Location}" />
 
-                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Location:" FontWeight="Bold" Margin="0,5,15,5" />
-                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding FullPath}" TextWrapping="Wrap" Margin="0,5" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Size" />
+                    <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                        <SelectableTextBlock Classes="value" Text="{Binding SizeText}" />
+                        <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsCalculating}" Width="60" Height="4" VerticalAlignment="Center" />
+                    </StackPanel>
 
-                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Size:" FontWeight="Bold" Margin="0,5,15,5" />
-                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Size}" Margin="0,5" />
+                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="Contains" IsVisible="{Binding IsDirectory}" />
+                    <TextBlock Grid.Row="2" Grid.Column="1" Classes="value" Text="{Binding ContentsText}" IsVisible="{Binding IsDirectory}" />
 
-                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Modified:" FontWeight="Bold" Margin="0,5,15,5" />
-                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding LastModified, StringFormat='{}{0:f}'}" Margin="0,5" />
+                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="Space" IsVisible="{Binding HasDriveInfo}" />
+                    <TextBlock Grid.Row="3" Grid.Column="1" Classes="value" Text="{Binding DriveInfoText}" IsVisible="{Binding HasDriveInfo}" />
 
-                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Extension:" FontWeight="Bold" Margin="0,5,15,5" />
-                    <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding Extension}" Margin="0,5" />
+                    <TextBlock Grid.Row="4" Grid.Column="0" Classes="label" Text="Created" />
+                    <TextBlock Grid.Row="4" Grid.Column="1" Classes="value" Text="{Binding CreatedText}" />
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" Classes="label" Text="Modified" />
+                    <TextBlock Grid.Row="5" Grid.Column="1" Classes="value" Text="{Binding ModifiedText}" />
+
+                    <TextBlock Grid.Row="6" Grid.Column="0" Classes="label" Text="Accessed" />
+                    <TextBlock Grid.Row="6" Grid.Column="1" Classes="value" Text="{Binding AccessedText}" />
+
+                    <TextBlock Grid.Row="7" Grid.Column="0" Classes="label" Text="Attributes" />
+                    <TextBlock Grid.Row="7" Grid.Column="1" Classes="value" Text="{Binding AttributesText}" />
+
+                    <TextBlock Grid.Row="8" Grid.Column="0" Classes="label" Text="Permissions" IsVisible="{Binding HasUnixPermissions}" />
+                    <TextBlock Grid.Row="8" Grid.Column="1" Classes="value monospace" Text="{Binding UnixPermissionsText}" IsVisible="{Binding HasUnixPermissions}" />
                 </Grid>
             </StackPanel>
         </DockPanel>

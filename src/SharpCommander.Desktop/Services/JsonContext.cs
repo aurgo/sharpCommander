@@ -4,7 +4,8 @@ using SharpCommander.Core.Models;
 namespace SharpCommander.Desktop.Services;
 
 /// <summary>
-/// JSON serialization context for AOT compatibility.
+/// Source-generated JSON context for the persisted settings (reflection-free, AOT and trim safe).
+/// Only <see cref="UserSettings"/> and the types it contains are persisted; <see cref="FileSystemEntry"/> is not.
 /// </summary>
 [JsonSerializable(typeof(UserSettings))]
 [JsonSerializable(typeof(FavoriteItem))]

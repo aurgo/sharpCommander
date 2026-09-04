@@ -1,100 +1,76 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:SharpCommander.Desktop.ViewModels"
-        mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="400"
         x:Class="SharpCommander.Desktop.Views.HashWindow"
         x:DataType="vm:HashViewModel"
-        Title="File Hashes"
-        Width="600" Height="400"
+        Title="File Checksums"
+        Width="640"
+        SizeToContent="Height"
+        MinHeight="200"
         WindowStartupLocation="CenterOwner"
+        CanResize="False"
         ShowInTaskbar="False">
 
     <Window.Styles>
-        <Style Selector="TextBlock.header">
-            <Setter Property="FontSize" Value="22" />
-            <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="Margin" Value="0,0,0,15" />
-        </Style>
-        <Style Selector="TextBlock.label">
+        <Style Selector="TextBlock.hash-label">
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Margin" Value="0,15,0,5" />
-            <Setter Property="Opacity" Value="0.7" />
-            <Setter Property="FontSize" Value="13" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,0,12,0" />
         </Style>
         <Style Selector="TextBox.hash">
             <Setter Property="IsReadOnly" Value="True" />
-            <Setter Property="FontFamily" Value="Consolas, Monospace" />
-            <Setter Property="Margin" Value="0,0,0,5" />
-            <Setter Property="CornerRadius" Value="6" />
-            <Setter Property="Padding" Value="10" />
-            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style Selector="Button.copy">
+            <Setter Property="Margin" Value="6,0,0,0" />
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
     </Window.Styles>
 
-    <Border Padding="25">
+    <Border Padding="24">
         <DockPanel>
-            <!-- Close Button -->
-            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
-                <Button Content="Close" Padding="25,10" Click="Close_Click" CornerRadius="6" FontWeight="SemiBold" />
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
+                <Button Classes="dialog-button" Content="Copy all" Click="Copy_Click" Tag="{Binding AllHashes}" IsEnabled="{Binding HasResults}" />
+                <Button Classes="dialog-button" Content="Cancel" Command="{Binding CancelCommand}" IsVisible="{Binding IsCalculating}" />
+                <Button Classes="dialog-button" Content="Close" Click="Close_Click" IsDefault="True" IsCancel="True" />
             </StackPanel>
 
-            <!-- Content -->
-            <ScrollViewer>
-                <StackPanel Margin="0,0,15,0">
-                    <TextBlock Classes="header" Text="File Checksums" />
+            <StackPanel Spacing="6">
+                <TextBlock Classes="dialog-title" Text="{Binding FileName}" />
+                <TextBlock Classes="dialog-secondary" Text="{Binding FilePath}" />
 
-                    <TextBlock Classes="label" Text="File Path:" />
-                    <TextBox Text="{Binding FilePath}" Classes="hash" TextWrapping="Wrap" />
-
-                    <!-- Loading State -->
-                    <Grid IsVisible="{Binding IsCalculating}" Margin="0,30,0,30">
-                        <StackPanel HorizontalAlignment="Center">
-                            <ProgressBar IsIndeterminate="True" Height="4" Width="200" Margin="0,0,0,15" />
-                            <TextBlock Text="Calculating hashes..." HorizontalAlignment="Center" Opacity="0.8" />
-                        </StackPanel>
-                    </Grid>
-
-                    <!-- Error State -->
-                    <TextBlock Text="{Binding ErrorMessage}" 
-                               IsVisible="{Binding HasError}" 
-                               Foreground="Firebrick" 
-                               FontWeight="SemiBold"
-                               Margin="0,20" 
-                               TextWrapping="Wrap" />
-
-                    <!-- Results State -->
-                    <StackPanel IsVisible="{Binding !IsCalculating}">
-                        <StackPanel IsVisible="{Binding !HasError}">
-                            <TextBlock Classes="label" Text="MD5:" />
-                            <Grid ColumnDefinitions="*,Auto">
-                                <TextBox Grid.Column="0" Text="{Binding Md5}" Classes="hash" />
-                                <Button Grid.Column="1" Command="{Binding CopyHashCommand}" CommandParameter="{Binding Md5}" ToolTip.Tip="Copy MD5" Margin="5,0,0,5" Padding="8,0">
-                                    <PathIcon Data="M19 21H8V7h11m0-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2m-3-4H4a2 2 0 0 0-2 2v14h2V3h12V1Z" Width="14" Height="14" />
-                                </Button>
-                            </Grid>
-
-                            <TextBlock Classes="label" Text="SHA-1:" />
-                            <Grid ColumnDefinitions="*,Auto">
-                                <TextBox Grid.Column="0" Text="{Binding Sha1}" Classes="hash" />
-                                <Button Grid.Column="1" Command="{Binding CopyHashCommand}" CommandParameter="{Binding Sha1}" ToolTip.Tip="Copy SHA-1" Margin="5,0,0,5" Padding="8,0">
-                                    <PathIcon Data="M19 21H8V7h11m0-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2m-3-4H4a2 2 0 0 0-2 2v14h2V3h12V1Z" Width="14" Height="14" />
-                                </Button>
-                            </Grid>
-
-                            <TextBlock Classes="label" Text="SHA-256:" />
-                            <Grid ColumnDefinitions="*,Auto">
-                                <TextBox Grid.Column="0" Text="{Binding Sha256}" Classes="hash" TextWrapping="Wrap" />
-                                <Button Grid.Column="1" Command="{Binding CopyHashCommand}" CommandParameter="{Binding Sha256}" ToolTip.Tip="Copy SHA-256" Margin="5,0,0,5" Padding="8,0">
-                                    <PathIcon Data="M19 21H8V7h11m0-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2m-3-4H4a2 2 0 0 0-2 2v14h2V3h12V1Z" Width="14" Height="14" />
-                                </Button>
-                            </Grid>
-                        </StackPanel>
-                    </StackPanel>
-
+                <StackPanel IsVisible="{Binding IsCalculating}" Margin="0,10,0,4" Spacing="4">
+                    <ProgressBar Minimum="0" Maximum="100" Value="{Binding ProgressPercent}" Height="6" />
+                    <TextBlock Classes="dialog-secondary" Text="{Binding StatusText}" />
                 </StackPanel>
-            </ScrollViewer>
+
+                <TextBlock Classes="dialog-error" Text="{Binding ErrorMessage}" IsVisible="{Binding HasError}" Margin="0,8,0,0" />
+
+                <StackPanel IsVisible="{Binding HasResults}" Spacing="6" Margin="0,10,0,0">
+                    <Grid ColumnDefinitions="80,*,Auto">
+                        <TextBlock Grid.Column="0" Classes="hash-label" Text="MD5" />
+                        <TextBox Grid.Column="1" Classes="monospace hash" Text="{Binding Md5}" />
+                        <Button Grid.Column="2" Classes="copy" Content="Copy" Click="Copy_Click" Tag="{Binding Md5}" ToolTip.Tip="Copy MD5" />
+                    </Grid>
+                    <Grid ColumnDefinitions="80,*,Auto">
+                        <TextBlock Grid.Column="0" Classes="hash-label" Text="SHA-1" />
+                        <TextBox Grid.Column="1" Classes="monospace hash" Text="{Binding Sha1}" />
+                        <Button Grid.Column="2" Classes="copy" Content="Copy" Click="Copy_Click" Tag="{Binding Sha1}" ToolTip.Tip="Copy SHA-1" />
+                    </Grid>
+                    <Grid ColumnDefinitions="80,*,Auto">
+                        <TextBlock Grid.Column="0" Classes="hash-label" Text="SHA-256" />
+                        <TextBox Grid.Column="1" Classes="monospace hash" Text="{Binding Sha256}" />
+                        <Button Grid.Column="2" Classes="copy" Content="Copy" Click="Copy_Click" Tag="{Binding Sha256}" ToolTip.Tip="Copy SHA-256" />
+                    </Grid>
+                    <Grid ColumnDefinitions="80,*,Auto">
+                        <TextBlock Grid.Column="0" Classes="hash-label" Text="SHA-512" />
+                        <TextBox Grid.Column="1" Classes="monospace hash" Text="{Binding Sha512}" />
+                        <Button Grid.Column="2" Classes="copy" Content="Copy" Click="Copy_Click" Tag="{Binding Sha512}" ToolTip.Tip="Copy SHA-512" />
+                    </Grid>
+                </StackPanel>
+            </StackPanel>
         </DockPanel>
     </Border>
 </Window>

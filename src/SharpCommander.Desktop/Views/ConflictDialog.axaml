@@ -1,0 +1,64 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SharpCommander.Desktop.ViewModels"
+        x:Class="SharpCommander.Desktop.Views.ConflictDialog"
+        x:DataType="vm:ConflictDialogViewModel"
+        Title="Item already exists"
+        Width="580"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        ShowInTaskbar="False">
+    <Border Padding="20">
+        <StackPanel Spacing="12">
+            <TextBlock Classes="dialog-title" Text="{Binding Message}" />
+
+            <Grid ColumnDefinitions="Auto,*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="1" Text="Source" FontWeight="SemiBold" Margin="0,0,0,4" />
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="Existing" FontWeight="SemiBold" Margin="0,0,0,4" />
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Type" Classes="dialog-secondary" Margin="0,2,12,2" />
+                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SourceKind}" Margin="0,2,8,2" />
+                <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding DestinationKind}" Margin="0,2" />
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Size" Classes="dialog-secondary" Margin="0,2,12,2" />
+                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SourceSizeText}" Margin="0,2,8,2" />
+                <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding DestinationSizeText}" Margin="0,2" />
+
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Modified" Classes="dialog-secondary" Margin="0,2,12,2" />
+                <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="0,2,8,2">
+                    <TextBlock Text="{Binding SourceModifiedText}" />
+                    <TextBlock Text="(newer)" Classes="dialog-secondary" IsVisible="{Binding SourceIsNewer}" />
+                </StackPanel>
+                <StackPanel Grid.Row="3" Grid.Column="2" Orientation="Horizontal" Spacing="6" Margin="0,2">
+                    <TextBlock Text="{Binding DestinationModifiedText}" />
+                    <TextBlock Text="(newer)" Classes="dialog-secondary" IsVisible="{Binding DestinationIsNewer}" />
+                </StackPanel>
+
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Path" Classes="dialog-secondary" Margin="0,2,12,2" />
+                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SourcePath}" ToolTip.Tip="{Binding SourcePath}" TextTrimming="CharacterEllipsis" Classes="dialog-secondary" Margin="0,2,8,2" />
+                <TextBlock Grid.Row="4" Grid.Column="2" Text="{Binding DestinationPath}" ToolTip.Tip="{Binding DestinationPath}" TextTrimming="CharacterEllipsis" Classes="dialog-secondary" Margin="0,2" />
+            </Grid>
+
+            <TextBlock Classes="dialog-error" Text="{Binding OverwriteHint}" IsVisible="{Binding HasOverwriteHint}" />
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="Or keep both by renaming the new item to:" Classes="dialog-secondary" />
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBox Grid.Column="0" Name="NewNameBox" Text="{Binding NewName}" />
+                    <Button Grid.Column="1" Name="RenameButton" Classes="dialog-button" Content="Rename" Command="{Binding RenameCommand}" Margin="8,0,0,0" />
+                </Grid>
+                <TextBlock Classes="dialog-error" Text="{Binding RenameError}" IsVisible="{Binding HasRenameError}" />
+                <TextBlock Classes="dialog-secondary" Text="{Binding RenameHint}" IsVisible="{Binding ApplyToAll}" />
+            </StackPanel>
+
+            <CheckBox Content="{Binding ApplyToAllText}" IsChecked="{Binding ApplyToAll}" IsVisible="{Binding CanApplyToAll}" />
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,4,0,0">
+                <Button Name="OverwriteButton" Classes="dialog-button destructive" Content="Overwrite" Command="{Binding OverwriteCommand}" />
+                <Button Name="SkipButton" Classes="dialog-button" Content="Skip" Command="{Binding SkipCommand}" IsDefault="True" />
+                <Button Name="CancelButton" Classes="dialog-button" Content="Cancel" Command="{Binding CancelCommand}" IsCancel="True" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

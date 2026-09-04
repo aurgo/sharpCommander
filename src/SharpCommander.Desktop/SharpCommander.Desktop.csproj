@@ -1,47 +1,43 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <LangVersion>latest</LangVersion>
+    <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>SharpCommander.Desktop</RootNamespace>
     <AssemblyName>SharpCommander.Desktop</AssemblyName>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-    <Icon>Resources/icon.ico</Icon>
     <ApplicationIcon>Resources/icon.ico</ApplicationIcon>
-    <Version>2.0.0</Version>
-    <Authors>AURGO</Authors>
-    <Company>AURGO</Company>
-    <Product>SharpCommander</Product>
     <Description>A modern, cross-platform dual-pane file manager built with Avalonia UI</Description>
-    <Copyright>Copyright © AURGO 2024</Copyright>
-    
-    <!-- AOT and Trimming Compatibility (always enabled for analysis) -->
+
+    <!-- AOT and trimming analysis is always on so problems surface at build time. -->
     <IsAotCompatible>true</IsAotCompatible>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
-  <!-- Publishing Configuration for Self-Contained and AOT -->
-  <PropertyGroup Condition="'$(PublishAot)' == 'true' or '$(Configuration)' == 'Release'">
+  <!--
+    Publishing configuration. All publish scripts rely on these defaults so every platform ships the same way:
+    self-contained, partially trimmed (Avalonia.Controls.DataGrid is not fully trim-safe), no debug symbols.
+    Applied only when publishing, so a plain Release build keeps working without a RID.
+  -->
+  <PropertyGroup Condition="'$(_IsPublishing)' == 'true'">
+    <SelfContained>true</SelfContained>
     <PublishTrimmed>true</PublishTrimmed>
-    <TrimMode>full</TrimMode>
+    <TrimMode>partial</TrimMode>
     <InvariantGlobalization>false</InvariantGlobalization>
-    <!-- Exclude debug symbols from publish -->
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="11.2.2" />
-    <PackageReference Include="Avalonia.Desktop" Version="11.2.2" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.2" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.2" />
-    <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.2.2" />
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+    <PackageReference Include="Avalonia" Version="11.3.20" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.20" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.20" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.20" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.3.13" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
   </ItemGroup>
 
   <ItemGroup>
@@ -53,9 +49,17 @@
     <AvaloniaResource Include="Resources/**" Exclude="Resources/*.icns" />
   </ItemGroup>
 
-  <!-- macOS: copy Info.plist and icon.icns to output for .app bundle creation -->
-  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+  <!--
+    macOS bundle assets. The condition looks at the TARGET runtime (or at the host only when no RID is set,
+    so 'dotnet run' on a Mac still gets its Dock icon via run-macos.sh). Windows and Linux outputs no longer ship them.
+  -->
+  <ItemGroup Condition="$(RuntimeIdentifier.StartsWith('osx')) Or ('$(RuntimeIdentifier)' == '' And $([MSBuild]::IsOSPlatform('OSX')))">
     <None Include="Info.plist" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Resources/icon.icns" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- Make the test project able to see internal helpers without reflection. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="SharpCommander.Tests" />
   </ItemGroup>
 </Project>

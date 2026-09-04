@@ -1,11 +1,19 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
-using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 
 namespace SharpCommander.Desktop.Views;
 
+/// <summary>
+/// Asks for one line of text. The optional validator runs on every change: its message is shown under
+/// the box and OK stays disabled until the value is acceptable. Enter confirms, Escape cancels.
+/// </summary>
 public partial class InputDialog : Window
 {
+    private readonly Func<string, string?>? _validate;
+
+    /// <summary>The accepted text; empty when the dialog was cancelled.</summary>
     public string Result { get; private set; } = string.Empty;
 
     public InputDialog()
@@ -13,40 +21,47 @@ public partial class InputDialog : Window
         InitializeComponent();
     }
 
-    public InputDialog(string title, string prompt, string initialValue = "") : this()
+    public InputDialog(string title, string prompt, string initialValue = "", Func<string, string?>? validate = null)
+        : this()
     {
         Title = title;
-        var promptText = this.FindControl<TextBlock>("PromptText");
-        if (promptText != null) promptText.Text = prompt;
-        
-        var inputBox = this.FindControl<TextBox>("InputBox");
-        if (inputBox != null) 
-        {
-            inputBox.Text = initialValue;
-        }
+        PromptText.Text = prompt;
+        _validate = validate;
+        InputBox.Text = initialValue;
+        InputBox.PropertyChanged += OnInputPropertyChanged;
+        Validate();
 
-        Loaded += (sender, e) =>
+        Opened += (_, _) => Dispatcher.UIThread.Post(() =>
         {
-            if (inputBox != null)
-            {
-                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                {
-                    inputBox.Focus(Avalonia.Input.NavigationMethod.Pointer);
-                    inputBox.SelectAll();
-                }, Avalonia.Threading.DispatcherPriority.Input);
-            }
-        };
+            InputBox.Focus();
+            InputBox.SelectAll();
+        }, DispatcherPriority.Input);
     }
 
-    private void InitializeComponent()
+    private void OnInputPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
     {
-        AvaloniaXamlLoader.Load(this);
+        if (e.Property == TextBox.TextProperty)
+        {
+            Validate();
+        }
+    }
+
+    private void Validate()
+    {
+        var error = _validate?.Invoke(InputBox.Text ?? string.Empty);
+        ErrorText.Text = error ?? string.Empty;
+        ErrorText.IsVisible = error is not null;
+        OkButton.IsEnabled = error is null;
     }
 
     private void Ok_Click(object? sender, RoutedEventArgs e)
     {
-        var inputBox = this.FindControl<TextBox>("InputBox");
-        Result = inputBox?.Text ?? string.Empty;
+        if (!OkButton.IsEnabled)
+        {
+            return;
+        }
+
+        Result = InputBox.Text ?? string.Empty;
         Close(true);
     }
 

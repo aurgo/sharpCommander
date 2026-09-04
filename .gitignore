@@ -49,12 +49,11 @@ Desktop.ini
 # Linux
 *~
 
-# Installer files (old project)
+# Legacy WinForms project (kept for reference under legacy/, not built)
 Instalador/
+*.suo
 
-# Old project files
-sharpCommander/bin/
-sharpCommander/obj/
+# Publish output
 publish/
 
 

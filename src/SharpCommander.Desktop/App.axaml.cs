@@ -4,6 +4,8 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Data.Core.Plugins;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
+using SharpCommander.Core.Interfaces;
 using SharpCommander.Desktop.Services;
 using SharpCommander.Desktop.ViewModels;
 using SharpCommander.Desktop.Views;
@@ -11,10 +13,13 @@ using SharpCommander.Desktop.Views;
 namespace SharpCommander.Desktop;
 
 /// <summary>
-/// Main application class for SharpCommander.
+/// Main application class for SharpCommander: builds the object graph, installs the UI-thread exception
+/// handler and makes sure pending settings are written before the process exits.
 /// </summary>
 public sealed class App : Application
 {
+    private bool _showingUnhandledError;
+
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
@@ -34,16 +39,99 @@ public sealed class App : Application
         {
             var fileSystemService = new FileSystemService();
             var settingsService = new SettingsService();
-            var dialogService = new DialogService();
+            var dialogService = new DialogService(fileSystemService);
+            var trashService = new TrashService();
             var clipboardService = new ClipboardService();
-            var mainViewModel = new MainWindowViewModel(fileSystemService, settingsService, dialogService, clipboardService);
+            var operationsService = new FileOperationsService(fileSystemService, dialogService, trashService);
+            var themeService = new ThemeService();
+
+            var mainViewModel = new MainWindowViewModel(
+                fileSystemService,
+                settingsService,
+                dialogService,
+                clipboardService,
+                operationsService,
+                trashService,
+                themeService);
+
+            RegisterDispatcherExceptionHandler(dialogService);
 
             desktop.MainWindow = new MainWindow
             {
                 DataContext = mainViewModel
             };
+
+            // The window awaits ShutdownAsync when it closes; this is the safety net for Cmd+Q and the like:
+            // SettingsService never resumes on the UI thread, so blocking here cannot deadlock.
+            desktop.ShutdownRequested += (_, _) => SaveStateBlocking(mainViewModel);
+            desktop.Exit += (_, _) => mainViewModel.Dispose();
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    /// <summary>
+    /// Exceptions escaping a dispatcher callback are logged and shown instead of terminating the process (H3).
+    /// One dialog is shown at a time: exceptions raised while it is open are only logged. The returned token
+    /// removes the handler again (tests install it against a fake dialog service).
+    /// </summary>
+    internal IDisposable RegisterDispatcherExceptionHandler(IDialogService dialogService)
+    {
+        ArgumentNullException.ThrowIfNull(dialogService);
+
+        DispatcherUnhandledExceptionEventHandler handler = (_, e) =>
+        {
+            AppLog.Error("Unhandled exception on the UI thread.", e.Exception);
+            e.Handled = true;
+
+            if (_showingUnhandledError)
+            {
+                return;
+            }
+
+            _showingUnhandledError = true;
+            var exception = e.Exception;
+            Dispatcher.UIThread.Post(async () =>
+            {
+                try
+                {
+                    await dialogService.ShowErrorAsync("Unexpected error", exception.Message, exception.ToString());
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Error("The error dialog itself failed.", ex);
+                }
+                finally
+                {
+                    _showingUnhandledError = false;
+                }
+            });
+        };
+
+        Dispatcher.UIThread.UnhandledException += handler;
+        return new HandlerRegistration(() => Dispatcher.UIThread.UnhandledException -= handler);
+    }
+
+    /// <summary>Runs an action once when disposed.</summary>
+    private sealed class HandlerRegistration(Action release) : IDisposable
+    {
+        private Action? _release = release;
+
+        public void Dispose()
+        {
+            Interlocked.Exchange(ref _release, null)?.Invoke();
+        }
+    }
+
+    private static void SaveStateBlocking(MainWindowViewModel viewModel)
+    {
+        try
+        {
+            viewModel.SaveStateAsync().GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("The settings could not be saved on shutdown.", ex);
+        }
     }
 }
