@@ -52,12 +52,16 @@ public class PlatformBehaviourTests
     // ---- command modifier --------------------------------------------------------------------------------
 
     [Fact]
-    public void Shortcuts_UseOneCommandModifierConsistently()
+    public void Shortcuts_CarryTheCommandModifierConsistently()
     {
-        var expected = OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
-        Assert.Equal(expected, Shortcuts.CommandModifier);
+        // Which modifier the platform reports is not asserted here: Shortcuts asks Avalonia, and under the
+        // headless backend that answer is Control even on macOS, so a host-derived expectation would be wrong
+        // in CI and right nowhere useful. Whether a real Mac gets Cmd cannot be observed from a headless test -
+        // that was the original finding's own caveat. What matters, and what is checkable anywhere, is that
+        // every command gesture agrees with whatever the modifier turned out to be: the bug was a dispatch
+        // table hardcoded to Ctrl while this class computed something else and had no callers at all.
+        Assert.True(Shortcuts.CommandModifier is KeyModifiers.Control or KeyModifiers.Meta);
 
-        // Every command gesture carries it; the function keys deliberately do not appear in this table.
         foreach (var gesture in new[]
                  {
                      Shortcuts.SelectAll, Shortcuts.Copy, Shortcuts.Cut, Shortcuts.Paste, Shortcuts.Refresh,
