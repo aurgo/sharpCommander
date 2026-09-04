@@ -613,4 +613,53 @@ public class FilePanelViewModelTests
         await panel.NavigateToCommand.ExecuteAsync(other);
         Assert.Equal(other, panel.CurrentPath);
     }
+
+    // ---- audit regression: a refresh never cancels the listing a command is waiting for -------------------
+
+    [AvaloniaFact]
+    public async Task RefreshAsync_DoesNotCancelAListingAlreadyInFlight()
+    {
+        // The watcher's debounce timer fires a refresh right after a delete or rename. A refresh used to cancel
+        // the one already running, so the command's own "await RefreshAsync()" returned with the old rows still
+        // listed: it then re-selected a row that no longer existed and lost the cursor when the newer listing
+        // arrived. A refresh now queues behind whatever is in flight instead of cancelling it.
+        using var dir = new TempDir();
+        dir.File("a.txt");
+
+        var reached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var fileSystem = new DelegatingFileSystem(RealFileSystem);
+        var harness = new Harness(fileSystem);
+        var panel = harness.Panel;
+
+        // The first load must itself be a refresh: a refresh was always allowed to queue behind a navigation,
+        // so initializing here and holding that listing would not tell the two behaviours apart.
+        await panel.InitializeAsync(dir.Path);
+        var listingsBeforeHold = fileSystem.ListingTokens.Count;
+
+        var held = true;
+        fileSystem.BeforeList = async _ =>
+        {
+            if (held)
+            {
+                held = false;
+                reached.TrySetResult();
+                await release.Task;
+            }
+        };
+
+        var first = panel.RefreshAsync();
+        await reached.Task;
+
+        // A second refresh arrives while the first listing is still running.
+        var second = panel.RefreshAsync();
+        release.TrySetResult();
+        await first;
+        await second;
+
+        // The listing the first caller waited for was never cancelled, so its result is the one that applied.
+        Assert.True(fileSystem.ListingTokens.Count > listingsBeforeHold);
+        Assert.False(fileSystem.ListingTokens[listingsBeforeHold].IsCancellationRequested);
+        Assert.Contains("a.txt", Names(panel));
+    }
 }

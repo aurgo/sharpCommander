@@ -506,4 +506,42 @@ public class FileOperationsServiceTests
         Assert.False(opened);
         Assert.Contains("confirm:Run program?", dialogs.Calls);
     }
+
+    // ---- audit regression: a whole drive is not a transfer source ----------------------------------------
+
+    [AvaloniaFact]
+    public async Task Copy_AVolumeRoot_IsRefusedWithoutTouchingTheDestination()
+    {
+        // The Computer view auto-selects the first drive, so F5/F6 and drag and drop could hand a volume root
+        // to the service. Path.GetFileName of a root is empty, so the target became the destination folder
+        // itself and the whole drive merged into it flat, with no confirmation.
+        using var dir = new TempDir();
+        var destination = dir.Dir("destination");
+        var root = Path.GetPathRoot(dir.Path)!;
+        var (service, dialogs, _) = Create();
+
+        var result = await service.CopyAsync([root], destination);
+
+        Assert.Equal(1, result.Failed);
+        Assert.Equal(0, result.Succeeded);
+        Assert.Contains("drive", result.Errors[0].Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(destination));
+        Assert.DoesNotContain(dialogs.Calls, call => call.StartsWith("conflict:", StringComparison.Ordinal));
+        Assert.False(service.IsRunning);
+    }
+
+    [AvaloniaFact]
+    public async Task Move_AVolumeRoot_IsRefusedAndDeletesNothing()
+    {
+        using var dir = new TempDir();
+        var destination = dir.Dir("destination");
+        var root = Path.GetPathRoot(dir.Path)!;
+        var (service, _, _) = Create();
+
+        var result = await service.MoveAsync([root], destination);
+
+        Assert.Equal(1, result.Failed);
+        Assert.True(Directory.Exists(root));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(destination));
+    }
 }

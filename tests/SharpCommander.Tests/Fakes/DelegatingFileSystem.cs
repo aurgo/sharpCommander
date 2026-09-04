@@ -24,8 +24,16 @@ public sealed class DelegatingFileSystem(IFileSystemService inner) : IFileSystem
     /// <summary>Paths handed to <see cref="OpenWithDefaultAsync"/>, which never launches anything.</summary>
     public List<string> Opened { get; } = [];
 
+    /// <summary>The cancellation token of every listing, in order, so a test can see which ones were cancelled.</summary>
+    public List<CancellationToken> ListingTokens { get; } = [];
+
     public async Task<IReadOnlyList<FileSystemEntry>> GetEntriesAsync(string? path, CancellationToken cancellationToken = default)
     {
+        lock (ListingTokens)
+        {
+            ListingTokens.Add(cancellationToken);
+        }
+
         if (BeforeList is { } gate)
         {
             await gate(path);

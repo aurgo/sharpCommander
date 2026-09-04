@@ -9,6 +9,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using SharpCommander.Core.Interfaces;
 using SharpCommander.Core.Models;
+using SharpCommander.Core.Utilities;
 using SharpCommander.Desktop.Services;
 using SharpCommander.Desktop.ViewModels;
 using SharpCommander.Desktop.Views;
@@ -541,5 +542,169 @@ public class MainWindowTests
         Assert.False(harness.Window.IsVisible);
         Assert.Equal(1, harness.Settings.SaveCount);
         harness.Dispose();
+    }
+
+    // ---- audit regressions: keyboard focus survives a navigation -----------------------------------------
+
+    [AvaloniaFact]
+    public async Task Enter_OnAFolder_KeepsKeyboardFocusSoTheCursorKeysStillWork()
+    {
+        // A navigation replaces every row, so the ListBox recycles the focused one and Avalonia clears
+        // keyboard focus to null. The reveal callback tested the focus it had already lost, so after Enter the
+        // arrows, Enter, Backspace and type-ahead were all dead until the user clicked.
+        using var harness = new Harness();
+        var sub = harness.Dir.Dir(Path.Combine("left", "sub"));
+        harness.Dir.File(Path.Combine("left", "sub", "a.txt"));
+        harness.Dir.File(Path.Combine("left", "sub", "b.txt"));
+        await harness.ShowAsync();
+        harness.ViewModel.SetActivePanel(harness.LeftPanel);
+        Assert.True(harness.LeftPanel.SelectPath(sub));
+        harness.LeftPanel.RequestFocus();
+        await PumpAsync();
+        Assert.True(harness.LeftList.IsKeyboardFocusWithin);
+
+        Press(harness.Window, PhysicalKey.Enter);
+        await WaitUntilAsync(() => PathUtils.AreSamePath(harness.LeftPanel.CurrentPath, sub));
+
+        Assert.True(harness.LeftList.IsKeyboardFocusWithin);
+
+        // The cursor keys act on the list, not on the menu bar.
+        var before = harness.LeftPanel.SelectedEntry?.Name;
+        Press(harness.Window, PhysicalKey.ArrowDown);
+        await PumpAsync();
+        Assert.NotEqual(before, harness.LeftPanel.SelectedEntry?.Name);
+
+        // And Backspace navigates back up, landing on the folder we came from.
+        Press(harness.Window, PhysicalKey.Backspace);
+        await WaitUntilAsync(() => PathUtils.AreSamePath(harness.LeftPanel.CurrentPath, harness.Left));
+        Assert.True(harness.LeftList.IsKeyboardFocusWithin);
+    }
+
+    [AvaloniaFact]
+    public async Task Navigation_DoesNotStealFocusFromThePathBox()
+    {
+        // Restoring the cursor row must not fight the user who is typing a path.
+        using var harness = new Harness();
+        harness.Dir.Dir(Path.Combine("left", "sub"));
+        await harness.ShowAsync();
+        harness.ViewModel.SetActivePanel(harness.LeftPanel);
+
+        var pathBox = harness.LeftView.FindControl<AutoCompleteBox>("PathBox")!;
+        pathBox.Focus();
+        await PumpAsync();
+        Assert.True(pathBox.IsKeyboardFocusWithin);
+
+        await harness.LeftPanel.RefreshAsync();
+        await PumpAsync();
+
+        Assert.False(harness.LeftList.IsKeyboardFocusWithin);
+    }
+
+    // ---- audit regression: favorites reached with the mouse ----------------------------------------------
+
+    [AvaloniaFact]
+    public async Task Delete_OnAFavoriteClickedWithTheMouse_RemovesTheFavoriteAndNotTheFiles()
+    {
+        // Clicking a favorite navigates and then clears the selection, but keyboard focus stays on the row.
+        // Resolving the target from SelectedItem alone missed it, so Delete fell through to the window and ran
+        // the file delete command on the panel instead.
+        using var harness = new Harness();
+        harness.Dir.File(Path.Combine("left", "keep.txt"));
+        await harness.ShowAsync();
+
+        harness.ViewModel.SetActivePanel(harness.LeftPanel);
+        await harness.ViewModel.ToggleFavoriteCommand.ExecuteAsync(null);
+        await PumpAsync();
+        var favorites = harness.Window.FindControl<ListBox>("FavoritesListBox")!;
+        var custom = harness.LeftPanel.Favorites.FirstOrDefault(favorite => !favorite.IsSystem);
+        Assert.NotNull(custom);
+
+        harness.Window.UpdateLayout();
+        var row = favorites.GetRealizedContainers().OfType<ListBoxItem>()
+            .FirstOrDefault(item => ReferenceEquals(item.DataContext, custom));
+        Assert.NotNull(row);
+
+        Click(harness.Window, row!);
+        await PumpAsync();
+
+        var beforeDialogs = harness.Dialogs.Calls.Count(call => call.StartsWith("delete:", StringComparison.Ordinal));
+        Press(harness.Window, PhysicalKey.Delete);
+        await PumpAsync();
+
+        Assert.DoesNotContain(harness.LeftPanel.Favorites, favorite => ReferenceEquals(favorite, custom));
+        Assert.Equal(beforeDialogs, harness.Dialogs.Calls.Count(call => call.StartsWith("delete:", StringComparison.Ordinal)));
+    }
+
+    // ---- audit regressions: the path box ------------------------------------------------------------------
+
+    [AvaloniaFact]
+    public async Task PathBox_FormatsHistoryItemsAsTheirPath()
+    {
+        // The suggestion list filters and completes on the item's text. Formatting it as the type name made
+        // every real path fragment match nothing, and picking an entry navigated to
+        // "SharpCommander.Core.Models.NavigationHistoryItem".
+        using var harness = new Harness();
+        var sub = harness.Dir.Dir(Path.Combine("left", "reports"));
+        await harness.ShowAsync();
+
+        await harness.LeftPanel.NavigateToCommand.ExecuteAsync(sub);
+        await PumpAsync();
+
+        var item = harness.LeftPanel.NavigationHistory.FirstOrDefault(entry => PathUtils.AreSamePath(entry.Path, sub));
+        Assert.NotNull(item);
+        Assert.Equal(item!.Path, item.ToString());
+
+        var pathBox = harness.LeftView.FindControl<AutoCompleteBox>("PathBox")!;
+        Assert.NotNull(pathBox.ValueMemberBinding);
+    }
+
+    [AvaloniaFact]
+    public async Task PathBox_HasNoEnterKeyBindingAndNavigatesFromTheCodeBehind()
+    {
+        // Enter used to be a KeyBinding on the AutoCompleteBox. Avalonia evaluates key bindings before the
+        // control sees the key, so the box could never commit a highlighted suggestion: the first Enter always
+        // navigated to whatever raw text was in the box. The binding is gone and the code-behind handler
+        // navigates only while the drop-down is closed.
+        using var harness = new Harness();
+        var sub = harness.Dir.Dir(Path.Combine("left", "reports"));
+        await harness.ShowAsync();
+        harness.ViewModel.SetActivePanel(harness.LeftPanel);
+
+        var pathBox = harness.LeftView.FindControl<AutoCompleteBox>("PathBox")!;
+        Assert.DoesNotContain(pathBox.KeyBindings, binding => binding.Gesture?.Key == Key.Enter);
+
+        pathBox.Focus();
+        await PumpAsync();
+        Assert.False(pathBox.IsDropDownOpen);
+
+        harness.LeftPanel.EditablePath = sub;
+        await PumpAsync();
+        Press(harness.Window, PhysicalKey.Enter);
+        await WaitUntilAsync(() => PathUtils.AreSamePath(harness.LeftPanel.CurrentPath, sub));
+
+        Assert.True(PathUtils.AreSamePath(harness.LeftPanel.CurrentPath, sub));
+    }
+
+    [AvaloniaFact]
+    public async Task PathBox_F4_ReachesTheEditCommandInsteadOfTheDropDown()
+    {
+        // AutoCompleteBox handles F4 as a drop-down toggle and marks it handled, so the Edit shortcut the menu,
+        // the toolbar and the function bar all advertise was dead while the caret was in the path box. Nothing
+        // is selected here, so the command takes its "nothing to edit" branch and no editor is launched.
+        using var harness = new Harness();
+        harness.Dir.Dir(Path.Combine("left", "sub"));
+        await harness.ShowAsync();
+        harness.ViewModel.SetActivePanel(harness.LeftPanel);
+        harness.LeftPanel.SelectedEntry = null;
+
+        var pathBox = harness.LeftView.FindControl<AutoCompleteBox>("PathBox")!;
+        pathBox.Focus();
+        await PumpAsync();
+
+        harness.ViewModel.StatusMessage = string.Empty;
+        Press(harness.Window, PhysicalKey.F4);
+        await PumpAsync();
+
+        Assert.Contains("edit", harness.ViewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
     }
 }

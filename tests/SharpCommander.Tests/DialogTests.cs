@@ -767,4 +767,73 @@ public class DialogTests
         await service.ShowErrorAsync("t", "m");
         await service.ShowOperationErrorsAsync("t", []);
     }
+
+    // ---- audit regressions: armed buttons and keyboard dismissal -----------------------------------------
+
+    [AvaloniaFact]
+    public async Task DialogService_Confirm_WithDefaultIsCancel_ArmsTheSafeButton()
+    {
+        // The permanent-delete fallback follows the delete confirmation the user just answered with Enter, and
+        // on Linux without gio it appears within milliseconds. A repeating Enter must not delete.
+        var owner = new Window();
+        owner.Show();
+        var service = new DialogService(FileSystem, () => owner);
+
+        var pending = service.ShowConfirmAsync("Delete permanently?", "The trash refused it.", "Delete permanently",
+            "Skip", destructive: true, defaultIsCancel: true);
+        var dialog = OwnedDialog<ConfirmDialog>(owner);
+
+        var confirm = dialog.FindControl<Button>("ConfirmButton")!;
+        var cancel = dialog.FindControl<Button>("CancelButton")!;
+        Assert.False(confirm.IsDefault);
+        Assert.True(cancel.IsDefault);
+        Assert.Contains("destructive", confirm.Classes);
+
+        dialog.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        Assert.False(await pending);
+
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task DialogService_Confirm_StandaloneDestructivePromptStillConfirmsOnEnter()
+    {
+        // Arming the safe button is opt-in: a prompt that stands on its own keeps Enter as "yes".
+        var owner = new Window();
+        owner.Show();
+        var service = new DialogService(FileSystem, () => owner);
+
+        var pending = service.ShowConfirmAsync("Run program", "Run it?", "Run", "Do not run", destructive: true);
+        var dialog = OwnedDialog<ConfirmDialog>(owner);
+
+        Assert.True(dialog.FindControl<Button>("ConfirmButton")!.IsDefault);
+        dialog.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        Assert.True(await pending);
+
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public void AboutWindow_IsDismissedWithEscapeAndEnter()
+    {
+        // Every other dialog in the project could be dismissed from the keyboard; About could not, and opened
+        // with nothing focused at all.
+        var owner = new Window();
+        owner.Show();
+
+        foreach (var key in new[] { PhysicalKey.Escape, PhysicalKey.Enter })
+        {
+            var about = new AboutWindow { DataContext = new AboutViewModel() };
+            about.ShowDialog(owner);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(about.IsVisible);
+
+            about.KeyPressQwerty(key, RawInputModifiers.None);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.False(about.IsVisible);
+        }
+
+        owner.Close();
+    }
 }

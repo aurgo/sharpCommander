@@ -694,4 +694,95 @@ public class FileSystemServiceTests
             Assert.True(_service.IsExecutableOrScript(plain));
         }
     }
+
+    // ---- audit regressions: rename and the Unix open gate -------------------------------------------------
+
+    [Fact]
+    public async Task Rename_CaseOnlyChange_StillRefusesToClobberADifferentEntry()
+    {
+        // Skipping the Exists pre-check for a case-only rename is what makes it work on a case-insensitive
+        // volume mounted on Linux. The safety it gives up has to come back from Move: on a case-sensitive
+        // file system "a.txt" and "A.TXT" are two entries, and the rename must not silently destroy one.
+        using var dir = new TempDir();
+        var lower = dir.File("a.txt", "lower");
+        var upper = Path.Combine(dir.Path, "A.TXT");
+
+        if (File.Exists(upper))
+        {
+            // Case-insensitive host: "A.TXT" is the same entry, so the rename is the legitimate case-only one.
+            await _service.RenameAsync(lower, "A.TXT");
+            Assert.Equal("lower", File.ReadAllText(Path.Combine(dir.Path, "A.TXT")));
+            return;
+        }
+
+        File.WriteAllText(upper, "upper");
+
+        await Assert.ThrowsAnyAsync<Exception>(() => _service.RenameAsync(lower, "A.TXT"));
+
+        Assert.Equal("lower", File.ReadAllText(lower));
+        Assert.Equal("upper", File.ReadAllText(upper));
+    }
+
+    [Fact]
+    public void IsExecutableOrScript_UnixScriptWithAnUnknownExtension_IsRecognised()
+    {
+        // The extension list decided alone whenever a name had any extension, so a +x hello.py was opened
+        // without the confirmation the contract promises, and .NET then executed it.
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var dir = new TempDir();
+        var script = dir.File("hello.py", "#!/usr/bin/env python3\nprint('hi')\n");
+        File.SetUnixFileMode(script, File.GetUnixFileMode(script) | UnixFileMode.UserExecute);
+
+        Assert.True(_service.IsExecutableOrScript(script));
+    }
+
+    [Fact]
+    public void IsExecutableOrScript_UnixElfWithAnArbitraryExtension_IsRecognised()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var dir = new TempDir();
+        var binary = Path.Combine(dir.Path, "tool.1");
+        File.WriteAllBytes(binary, [0x7F, (byte)'E', (byte)'L', (byte)'F', 2, 1, 1, 0]);
+        File.SetUnixFileMode(binary, File.GetUnixFileMode(binary) | UnixFileMode.UserExecute);
+
+        Assert.True(_service.IsExecutableOrScript(binary));
+    }
+
+    [Fact]
+    public void IsExecutableOrScript_UnixDataCarryingTheExecuteBit_IsNotAProgram()
+    {
+        // Everything on a FAT or NTFS-3g mount is mode 0777; the magic number is what keeps those files from
+        // being treated as programs.
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var dir = new TempDir();
+        var notes = dir.File("notes.txt", "just text");
+        var data = dir.File("archive.dat", "not a program either");
+        File.SetUnixFileMode(notes, File.GetUnixFileMode(notes) | UnixFileMode.UserExecute);
+        File.SetUnixFileMode(data, File.GetUnixFileMode(data) | UnixFileMode.UserExecute);
+
+        Assert.False(_service.IsExecutableOrScript(notes));
+        Assert.False(_service.IsExecutableOrScript(data));
+    }
+
+    [Fact]
+    public void IsExecutableOrScript_KnownExtensionsAreRecognisedWithoutTheExecuteBit()
+    {
+        using var dir = new TempDir();
+
+        Assert.True(_service.IsExecutableOrScript(dir.File("app.jar", "x")));
+        Assert.True(_service.IsExecutableOrScript(dir.File("start.tool", "x")));
+        Assert.True(_service.IsExecutableOrScript(dir.File("panel.cpl", "x")));
+    }
 }
