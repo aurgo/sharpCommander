@@ -36,10 +36,18 @@
                                      Classes="path-combo"
                                      Text="{Binding EditablePath}"
                                      ItemsSource="{Binding NavigationHistory}"
+                                     ValueMemberBinding="{Binding Path, x:DataType=models:NavigationHistoryItem}"
                                      FilterMode="Contains"
                                      Margin="4,0"
                                      HorizontalAlignment="Stretch"
                                      Watermark="Enter a path and press Enter">
+                        <!--
+                            ValueMemberBinding is what the drop-down filters, completes and commits on. Without it
+                            AutoCompleteBox falls back to item.ToString(), i.e. the type name, so no real path ever
+                            matched. Enter is handled in the code-behind rather than through a KeyBinding: key
+                            bindings run before the control sees the key, which stopped the drop-down from ever
+                            committing a highlighted suggestion.
+                        -->
                         <AutoCompleteBox.ItemTemplate>
                             <DataTemplate x:DataType="models:NavigationHistoryItem">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
@@ -52,9 +60,6 @@
                                 </StackPanel>
                             </DataTemplate>
                         </AutoCompleteBox.ItemTemplate>
-                        <AutoCompleteBox.KeyBindings>
-                            <KeyBinding Gesture="Enter" Command="{Binding NavigateToPathCommand}" />
-                        </AutoCompleteBox.KeyBindings>
                     </AutoCompleteBox>
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">

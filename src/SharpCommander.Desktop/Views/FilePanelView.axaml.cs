@@ -43,6 +43,14 @@ public partial class FilePanelView : UserControl
     private bool _pressedOnSelectedRow;
     private bool _dragging;
 
+    /// <summary>
+    /// Whether the list held keyboard focus when the current listing started. A navigation replaces every entry,
+    /// so the ListBox recycles the focused row and Avalonia clears keyboard focus to null before the reveal
+    /// callback runs; without this flag the callback cannot tell "the user was driving the list with the
+    /// keyboard" from "the user is typing in the path box", and the cursor keys go dead after every Enter.
+    /// </summary>
+    private bool _hadKeyboardFocus;
+
     public FilePanelView()
     {
         InitializeComponent();
@@ -55,8 +63,44 @@ public partial class FilePanelView : UserControl
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
         AddHandler(DragDrop.DragLeaveEvent, OnDragLeave);
         AddHandler(DragDrop.DropEvent, OnDrop);
+        PathBox.AddHandler(KeyDownEvent, OnPathBoxKeyDown, RoutingStrategies.Tunnel);
 
         DataContextChanged += OnDataContextChanged;
+    }
+
+    /// <summary>
+    /// Enter and F4 in the path box. Enter navigates only once the suggestion drop-down is closed, so the first
+    /// Enter commits the highlighted suggestion and the second one goes to it. F4 is claimed before the
+    /// AutoCompleteBox, which otherwise handles it as a drop-down toggle and swallows the Edit shortcut the
+    /// menu, the toolbar and the function bar all advertise.
+    /// </summary>
+    private void OnPathBoxKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.KeyModifiers != KeyModifiers.None)
+        {
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.Enter when !PathBox.IsDropDownOpen:
+                if (_viewModel?.NavigateToPathCommand is { } navigate && navigate.CanExecute(null))
+                {
+                    navigate.Execute(null);
+                }
+
+                e.Handled = true;
+                break;
+
+            case Key.F4:
+                if (_mainViewModel?.EditCommand is { } edit && edit.CanExecute(null))
+                {
+                    edit.Execute(null);
+                }
+
+                e.Handled = true;
+                break;
+        }
     }
 
     // ---- wiring -----------------------------------------------------------------------------------------
@@ -140,6 +184,16 @@ public partial class FilePanelView : UserControl
                 if (_viewModel?.IsSearchActive == true)
                 {
                     Dispatcher.UIThread.Post(() => SearchBox.Focus(), DispatcherPriority.Loaded);
+                }
+
+                break;
+
+            case nameof(FilePanelViewModel.IsLoading):
+                // Captured while the old rows are still in place: once the listing is applied the focused row
+                // is gone and IsKeyboardFocusWithin is already false.
+                if (_viewModel?.IsLoading == true)
+                {
+                    _hadKeyboardFocus = FileListBox.IsKeyboardFocusWithin;
                 }
 
                 break;
@@ -306,11 +360,29 @@ public partial class FilePanelView : UserControl
         Dispatcher.UIThread.Post(() =>
         {
             FileListBox.ScrollIntoView(entry);
-            if (FileListBox.IsKeyboardFocusWithin && FileListBox.ContainerFromItem(entry) is Control container)
+            if (ShouldRestoreKeyboardFocus() && FileListBox.ContainerFromItem(entry) is Control container)
             {
                 container.Focus(NavigationMethod.Directional);
+                _hadKeyboardFocus = true;
             }
         }, DispatcherPriority.Loaded);
+    }
+
+    /// <summary>
+    /// True when the cursor row should take keyboard focus after a listing was applied: the list still has it
+    /// (an in-place refresh), it had it when the listing started (a navigation, which clears it), or the window
+    /// has no focused element at all, which is the state a navigation reset leaves behind. Focus is not stolen
+    /// while the user is typing in the path box, the filter box or any other control.
+    /// </summary>
+    private bool ShouldRestoreKeyboardFocus()
+    {
+        if (FileListBox.IsKeyboardFocusWithin)
+        {
+            return true;
+        }
+
+        var focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement();
+        return focused is null && _hadKeyboardFocus;
     }
 
     private void FocusSelectedRow()

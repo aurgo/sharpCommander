@@ -17,12 +17,24 @@ internal static class VolumeEnumerator
         "mqueue", "hugetlbfs", "binfmt_misc", "bpf", "efivarfs", "rpc_pipefs", "nsfs", "selinuxfs", "fdescfs", "none"
     };
 
+    /// <summary>
+    /// Mount points that carry no user data. "/run" is deliberately not listed as a whole: udisks2 mounts
+    /// removable media at /run/media/&lt;user&gt;/&lt;label&gt; on Fedora, RHEL, Arch and openSUSE, so only the
+    /// noisy children of /run are hidden.
+    /// </summary>
     private static readonly string[] LinuxSystemMountPrefixes =
     [
-        "/dev", "/proc", "/sys", "/run", "/snap", "/boot/efi", "/var/lib/docker", "/var/snap", "/var/lib/snapd"
+        "/dev", "/proc", "/sys", "/snap", "/boot/efi", "/var/lib/docker", "/var/snap", "/var/lib/snapd",
+        "/run/user", "/run/credentials", "/run/snapd", "/run/lock", "/run/systemd", "/run/docker"
     ];
 
-    private static readonly DriveType[] LinuxVolumeTypes = [DriveType.Fixed, DriveType.Removable, DriveType.Network];
+    /// <summary>
+    /// Volume kinds listed on Linux. CDRom covers mounted DVDs and loop-mounted ISOs (iso9660/udf) and Unknown
+    /// covers filesystems .NET cannot name from their statfs magic (bcachefs, erofs, recent virtiofs); both carry
+    /// user data, and the pseudo-format and prefix filters already remove the noise.
+    /// </summary>
+    private static readonly DriveType[] LinuxVolumeTypes =
+        [DriveType.Fixed, DriveType.Removable, DriveType.Network, DriveType.CDRom, DriveType.Unknown];
 
     /// <summary>Returns the visible volumes, root first.</summary>
     public static IReadOnlyList<FileSystemEntry> GetVolumes(CancellationToken cancellationToken)
@@ -49,17 +61,31 @@ internal static class VolumeEnumerator
         {
             var mountPoint = PathUtils.NormalizeFullPath(drive.Name);
             var underVolumes = mountPoint.StartsWith("/Volumes/", StringComparison.Ordinal);
-            return (mountPoint == "/" || underVolumes) && !HasPseudoFormat(drive, excludeFuse: false);
+            return (mountPoint == "/" || underVolumes) && !HasPseudoFormat(drive);
         }
 
         if (OperatingSystem.IsLinux())
         {
-            return LinuxVolumeTypes.Contains(SafeDriveType(drive))
-                   && !HasPseudoFormat(drive, excludeFuse: true)
-                   && !IsLinuxSystemMountPoint(PathUtils.NormalizeFullPath(drive.Name));
+            if (HasPseudoFormat(drive))
+            {
+                return false;
+            }
+
+            return IsLinuxVolumeVisible(PathUtils.NormalizeFullPath(drive.Name), SafeDriveType(drive));
         }
 
         return SafeIsReady(drive);
+    }
+
+    /// <summary>
+    /// Decides whether a Linux mount point belongs in the Computer view. Pure so it can be unit tested without
+    /// a real mount: the caller has already ruled out pseudo filesystems by format.
+    /// </summary>
+    internal static bool IsLinuxVolumeVisible(string mountPoint, DriveType driveType)
+    {
+        return LinuxVolumeTypes.Contains(driveType)
+               && !IsLinuxSystemMountPoint(mountPoint)
+               && !IsHiddenMountPoint(mountPoint);
     }
 
     private static bool IsLinuxSystemMountPoint(string mountPoint)
@@ -75,24 +101,27 @@ internal static class VolumeEnumerator
         return false;
     }
 
-    private static bool HasPseudoFormat(DriveInfo drive, bool excludeFuse)
+    /// <summary>
+    /// Hides mount points whose own name starts with a dot: the runtime mount every running AppImage creates at
+    /// /tmp/.mount_&lt;app&gt;XXXXXX, and the same convention used by other self-mounting bundles.
+    /// </summary>
+    private static bool IsHiddenMountPoint(string mountPoint)
     {
-        string format;
+        return Path.GetFileName(mountPoint).StartsWith('.');
+    }
+
+    private static bool HasPseudoFormat(DriveInfo drive)
+    {
         try
         {
-            format = drive.DriveFormat;
+            // statfs reports every FUSE mount as "fuse"/"fuseblk", never as "fuse.<subtype>", so there is no
+            // subtype rule here: real FUSE volumes (sshfs, NTFS-3g, MTP) carry user data and stay visible.
+            return PseudoFormats.Contains(drive.DriveFormat);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return true;
         }
-
-        if (PseudoFormats.Contains(format))
-        {
-            return true;
-        }
-
-        return excludeFuse && format.StartsWith("fuse.", StringComparison.OrdinalIgnoreCase);
     }
 
     private static FileSystemEntry CreateEntry(DriveInfo drive)

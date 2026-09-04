@@ -20,6 +20,8 @@
     <string>icon.icns</string>
     <key>CFBundleIconName</key>
     <string>icon</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>SharpCommander asks Finder to move files to the Trash.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>

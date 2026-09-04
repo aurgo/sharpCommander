@@ -174,6 +174,26 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         return _settingsService.SaveAsync();
     }
 
+    /// <summary>
+    /// Asks whether to close while a copy, move or delete is still running. Returns true when there is nothing
+    /// running or the user confirmed; false to keep the window open. The batch itself is stopped by
+    /// <see cref="ShutdownAsync"/>, which cancels it and waits for the engine to clean up.
+    /// </summary>
+    public async Task<bool> ConfirmCloseAsync()
+    {
+        if (!_operations.IsRunning)
+        {
+            return true;
+        }
+
+        return await _dialogService.ShowConfirmAsync(
+            "An operation is running",
+            "A file operation is still running. Cancel it and quit?",
+            confirmText: "Cancel and quit",
+            cancelText: "Keep working",
+            destructive: true);
+    }
+
     /// <summary>Saves the state and flushes any pending settings write; await it before closing the window.</summary>
     public async Task ShutdownAsync()
     {

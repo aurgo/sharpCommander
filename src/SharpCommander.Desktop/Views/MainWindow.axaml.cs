@@ -8,6 +8,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using SharpCommander.Core.Models;
 using SharpCommander.Desktop.Services;
+using SharpCommander.Desktop.Utilities;
 using SharpCommander.Desktop.ViewModels;
 
 namespace SharpCommander.Desktop.Views;
@@ -21,41 +22,61 @@ public partial class MainWindow : Window
 {
     private const double ReorderThreshold = 8;
 
+    /// <summary>How long an unattended shutdown waits for a running batch to stop and clean up.</summary>
+    private static readonly TimeSpan ShutdownGracePeriod = TimeSpan.FromSeconds(10);
+
     /// <summary>
     /// The shortcuts, in evaluation order. They are dispatched from <see cref="OnKeyDown"/> so a focused text
     /// box keeps its own keys (Delete, Backspace, Ctrl+A/C/V/X): Avalonia's KeyBindings run before the focused
     /// control sees the key, which is not what a file manager wants while the user edits a path.
+    /// The command-modifier entries come from <see cref="Utilities.Shortcuts"/>, so they are Cmd on macOS and
+    /// Ctrl elsewhere; <see cref="BuildShortcutMap"/> adds the Ctrl spelling as an alias where the two differ.
+    /// Function keys are the same on every platform.
     /// </summary>
-    private static readonly (KeyGesture Gesture, Func<MainWindowViewModel, ICommand?> Command)[] Shortcuts =
-    [
-        (KeyGesture.Parse("F2"), vm => vm.RenameCommand),
-        (KeyGesture.Parse("F3"), vm => vm.ViewCommand),
-        (KeyGesture.Parse("F4"), vm => vm.EditCommand),
-        (KeyGesture.Parse("F5"), vm => vm.CopyCommand),
-        (KeyGesture.Parse("F6"), vm => vm.MoveCommand),
-        (KeyGesture.Parse("F7"), vm => vm.NewFolderCommand),
-        (KeyGesture.Parse("F8"), vm => vm.DeleteCommand),
-        (KeyGesture.Parse("Delete"), vm => vm.DeleteCommand),
-        (KeyGesture.Parse("Shift+Delete"), vm => vm.DeletePermanentCommand),
-        (KeyGesture.Parse("F9"), vm => vm.SwapPanelsCommand),
-        (KeyGesture.Parse("F10"), vm => vm.ExitCommand),
-        (KeyGesture.Parse("Ctrl+A"), vm => vm.SelectAllCommand),
-        (KeyGesture.Parse("Ctrl+C"), vm => vm.CopyToClipboardCommand),
-        (KeyGesture.Parse("Ctrl+X"), vm => vm.CutToClipboardCommand),
-        (KeyGesture.Parse("Ctrl+V"), vm => vm.PasteFromClipboardCommand),
-        (KeyGesture.Parse("Ctrl+R"), vm => vm.RefreshCommand),
-        (KeyGesture.Parse("Ctrl+B"), vm => vm.ToggleFavoritesPanelCommand),
-        (KeyGesture.Parse("Ctrl+D"), vm => vm.ToggleFavoriteCommand),
-        (KeyGesture.Parse("Ctrl+F"), vm => vm.ToggleSearchCommand),
-        (KeyGesture.Parse("Ctrl+H"), vm => vm.ActivePanel?.ToggleShowHiddenFilesCommand),
-        (KeyGesture.Parse("Ctrl+Shift+F"), vm => vm.ShowAdvancedSearchCommand),
-        (KeyGesture.Parse("Ctrl+M"), vm => vm.ShowMassRenameCommand),
-        (KeyGesture.Parse("Ctrl+Shift+H"), vm => vm.CalculateHashCommand),
-        (KeyGesture.Parse("Ctrl+T"), vm => vm.NewTabCommand),
-        (KeyGesture.Parse("Ctrl+W"), vm => vm.CloseCurrentTabCommand),
-        (KeyGesture.Parse("Ctrl+Tab"), vm => vm.NextTabCommand),
-        (KeyGesture.Parse("Ctrl+Shift+Tab"), vm => vm.PreviousTabCommand)
-    ];
+    private static readonly (KeyGesture Gesture, Func<MainWindowViewModel, ICommand?> Command)[] ShortcutMap =
+        BuildShortcutMap();
+
+    private static (KeyGesture Gesture, Func<MainWindowViewModel, ICommand?> Command)[] BuildShortcutMap()
+    {
+        (KeyGesture Gesture, Func<MainWindowViewModel, ICommand?> Command)[] entries =
+        [
+            (KeyGesture.Parse("F2"), vm => vm.RenameCommand),
+            (KeyGesture.Parse("F3"), vm => vm.ViewCommand),
+            (KeyGesture.Parse("F4"), vm => vm.EditCommand),
+            (KeyGesture.Parse("F5"), vm => vm.CopyCommand),
+            (KeyGesture.Parse("F6"), vm => vm.MoveCommand),
+            (KeyGesture.Parse("F7"), vm => vm.NewFolderCommand),
+            (KeyGesture.Parse("F8"), vm => vm.DeleteCommand),
+            (KeyGesture.Parse("Delete"), vm => vm.DeleteCommand),
+            (KeyGesture.Parse("Shift+Delete"), vm => vm.DeletePermanentCommand),
+            (KeyGesture.Parse("F9"), vm => vm.SwapPanelsCommand),
+            (KeyGesture.Parse("F10"), vm => vm.ExitCommand),
+            (Utilities.Shortcuts.SelectAll, vm => vm.SelectAllCommand),
+            (Utilities.Shortcuts.Copy, vm => vm.CopyToClipboardCommand),
+            (Utilities.Shortcuts.Cut, vm => vm.CutToClipboardCommand),
+            (Utilities.Shortcuts.Paste, vm => vm.PasteFromClipboardCommand),
+            (Utilities.Shortcuts.Refresh, vm => vm.RefreshCommand),
+            (Utilities.Shortcuts.ToggleFavoritesPanel, vm => vm.ToggleFavoritesPanelCommand),
+            (Utilities.Shortcuts.ToggleFavorite, vm => vm.ToggleFavoriteCommand),
+            (Utilities.Shortcuts.Filter, vm => vm.ToggleSearchCommand),
+            (Utilities.Shortcuts.ShowHiddenFiles, vm => vm.ActivePanel?.ToggleShowHiddenFilesCommand),
+            (Utilities.Shortcuts.AdvancedSearch, vm => vm.ShowAdvancedSearchCommand),
+            (Utilities.Shortcuts.MassRename, vm => vm.ShowMassRenameCommand),
+            (Utilities.Shortcuts.Checksums, vm => vm.CalculateHashCommand),
+            (Utilities.Shortcuts.NewTab, vm => vm.NewTabCommand),
+            (Utilities.Shortcuts.CloseTab, vm => vm.CloseCurrentTabCommand),
+            (Utilities.Shortcuts.NextTab, vm => vm.NextTabCommand),
+            (Utilities.Shortcuts.PreviousTab, vm => vm.PreviousTabCommand)
+        ];
+
+        // Ctrl keeps working on macOS, where the primary spelling is Cmd. The more specific gesture is already
+        // in the list, so appending the aliases cannot shadow it.
+        var aliases = entries
+            .Where(entry => entry.Gesture.KeyModifiers.HasFlag(KeyModifiers.Meta))
+            .Select(entry => (Gesture: Utilities.Shortcuts.WithControl(entry.Gesture), entry.Command));
+
+        return [.. entries, .. aliases];
+    }
 
     private MainWindowViewModel? _viewModel;
     private bool _initialized;
@@ -171,6 +192,12 @@ public partial class MainWindow : Window
         {
             if (_viewModel is { } viewModel)
             {
+                if (!await viewModel.ConfirmCloseAsync())
+                {
+                    _shuttingDown = false;
+                    return;
+                }
+
                 viewModel.RememberWindowBounds(ClientSize.Width, ClientSize.Height, WindowState == WindowState.Maximized);
                 await viewModel.ShutdownAsync();
             }
@@ -194,6 +221,22 @@ public partial class MainWindow : Window
         if (_viewModel is not { } viewModel)
         {
             return;
+        }
+
+        try
+        {
+            // The application or the session is going away and there is nobody left to ask: stop a running
+            // batch and give the engine its grace period so the partially written temporary file is removed
+            // rather than left next to the destination.
+            if (viewModel.Operations.IsRunning)
+            {
+                viewModel.Operations.Cancel();
+                viewModel.Operations.WhenIdleAsync().WaitAsync(ShutdownGracePeriod).GetAwaiter().GetResult();
+            }
+        }
+        catch (Exception ex) when (ex is TimeoutException or OperationCanceledException)
+        {
+            AppLog.Warning("A file operation did not stop before the application closed.");
         }
 
         try
@@ -223,7 +266,7 @@ public partial class MainWindow : Window
     {
         if (!e.Handled && _viewModel is { } viewModel)
         {
-            foreach (var (gesture, resolve) in Shortcuts)
+            foreach (var (gesture, resolve) in ShortcutMap)
             {
                 if (!gesture.Matches(e))
                 {

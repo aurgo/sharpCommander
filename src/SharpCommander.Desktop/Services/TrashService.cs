@@ -225,11 +225,12 @@ public sealed class TrashService : ITrashService
                 return false;
             }
 
+            // Drain both pipes so a chatty helper cannot block on a full buffer.
+            var stdout = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var stderr = process.StandardError.ReadToEndAsync(cancellationToken);
+
             try
             {
-                // Drain both pipes so a chatty helper cannot block on a full buffer.
-                var stdout = process.StandardOutput.ReadToEndAsync(cancellationToken);
-                var stderr = process.StandardError.ReadToEndAsync(cancellationToken);
                 await process.WaitForExitAsync(cancellationToken);
                 await Task.WhenAll(stdout, stderr);
             }
@@ -239,7 +240,20 @@ public sealed class TrashService : ITrashService
                 throw;
             }
 
-            return process.ExitCode == 0;
+            if (process.ExitCode == 0)
+            {
+                return true;
+            }
+
+            // Surfacing stderr makes a denied automation permission visible: without
+            // NSAppleEventsUsageDescription (or with the consent refused) macOS fails the Apple event with
+            // errAEEventNotPermitted (-1743) and every delete would otherwise take the fallback in silence.
+            var message = (await stderr).Trim();
+            AppLog.Warning(message.Length == 0
+                ? $"{fileName} exited with code {process.ExitCode}; using the fallback."
+                : $"{fileName} exited with code {process.ExitCode}: {message}");
+
+            return false;
         }
         catch (Win32Exception)
         {
