@@ -1,9 +1,10 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SharpCommander.Desktop.Localization"
         xmlns:vm="using:SharpCommander.Desktop.ViewModels"
         x:Class="SharpCommander.Desktop.Views.MassRenameWindow"
         x:DataType="vm:MassRenameViewModel"
-        Title="Mass Rename"
+        Title="{loc:T MassRenameWindow_MassRename}"
         Width="900" Height="680"
         MinWidth="640" MinHeight="480"
         WindowStartupLocation="CenterOwner">
@@ -13,43 +14,43 @@
             <Grid DockPanel.Dock="Top" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="20" RowSpacing="12" Margin="0,0,0,12">
                 <!-- Masks -->
                 <StackPanel Grid.Column="0" Grid.Row="0" Spacing="4">
-                    <TextBlock Text="File name mask" FontWeight="SemiBold" />
+                    <TextBlock Text="{loc:T MassRenameWindow_FileNameMask}" FontWeight="SemiBold" />
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
                         <TextBox Grid.Column="0" Text="{Binding FileNameMask}" />
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
-                            <Button Content="[N]" Command="{Binding InsertMaskCommand}" CommandParameter="[N]" ToolTip.Tip="Insert the original name" Padding="8,4" />
-                            <Button Content="[C]" Command="{Binding InsertMaskCommand}" CommandParameter="[C]" ToolTip.Tip="Insert the counter" Padding="8,4" />
+                            <Button Content="[N]" Command="{Binding InsertMaskCommand}" CommandParameter="[N]" ToolTip.Tip="{loc:T MassRenameWindow_InsertTheOriginalName}" Padding="8,4" />
+                            <Button Content="[C]" Command="{Binding InsertMaskCommand}" CommandParameter="[C]" ToolTip.Tip="{loc:T MassRenameWindow_InsertTheCounter}" Padding="8,4" />
                         </StackPanel>
                     </Grid>
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Grid.Row="0" Spacing="4">
-                    <TextBlock Text="Extension mask" FontWeight="SemiBold" />
+                    <TextBlock Text="{loc:T MassRenameWindow_ExtensionMask}" FontWeight="SemiBold" />
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
                         <TextBox Grid.Column="0" Text="{Binding ExtensionMask}" />
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
-                            <Button Content="[E]" Command="{Binding InsertMaskExtCommand}" CommandParameter="[E]" ToolTip.Tip="Insert the original extension" Padding="8,4" />
-                            <Button Content="[C]" Command="{Binding InsertMaskExtCommand}" CommandParameter="[C]" ToolTip.Tip="Insert the counter" Padding="8,4" />
+                            <Button Content="[E]" Command="{Binding InsertMaskExtCommand}" CommandParameter="[E]" ToolTip.Tip="{loc:T MassRenameWindow_InsertTheOriginalExtension}" Padding="8,4" />
+                            <Button Content="[C]" Command="{Binding InsertMaskExtCommand}" CommandParameter="[C]" ToolTip.Tip="{loc:T MassRenameWindow_InsertTheCounter}" Padding="8,4" />
                         </StackPanel>
                     </Grid>
                 </StackPanel>
 
                 <!-- Search and replace -->
                 <StackPanel Grid.Column="0" Grid.Row="1" Spacing="4">
-                    <TextBlock Text="Search for" FontWeight="SemiBold" />
+                    <TextBlock Text="{loc:T MassRenameWindow_SearchFor}" FontWeight="SemiBold" />
                     <TextBox Text="{Binding SearchPattern}" />
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Grid.Row="1" Spacing="4">
-                    <TextBlock Text="Replace with" FontWeight="SemiBold" />
+                    <TextBlock Text="{loc:T MassRenameWindow_ReplaceWith}" FontWeight="SemiBold" />
                     <TextBox Text="{Binding ReplacePattern}" />
                 </StackPanel>
 
                 <!-- Options -->
                 <StackPanel Grid.Column="0" Grid.Row="2" Spacing="6">
-                    <CheckBox Content="Search pattern is a regular expression" IsChecked="{Binding UseRegex}" />
+                    <CheckBox Content="{loc:T MassRenameWindow_SearchPatternIsARegularExpression}" IsChecked="{Binding UseRegex}" />
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
-                        <TextBlock Grid.Column="0" Text="Case:" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="0" Text="{loc:T MassRenameWindow_Case}" VerticalAlignment="Center" />
                         <ComboBox Grid.Column="1" SelectedIndex="{Binding CaseOption}" HorizontalAlignment="Stretch">
                             <ComboBoxItem>No change</ComboBoxItem>
                             <ComboBoxItem>lowercase</ComboBoxItem>
@@ -61,13 +62,13 @@
 
                 <!-- Counter -->
                 <StackPanel Grid.Column="1" Grid.Row="2" Spacing="4">
-                    <TextBlock Text="Counter [C]" FontWeight="SemiBold" />
+                    <TextBlock Text="{loc:T MassRenameWindow_CounterC}" FontWeight="SemiBold" />
                     <Grid ColumnDefinitions="Auto,*,Auto,*,Auto,*" ColumnSpacing="8">
-                        <TextBlock Grid.Column="0" Text="Start" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="0" Text="{loc:T MassRenameWindow_Start}" VerticalAlignment="Center" />
                         <NumericUpDown Grid.Column="1" Value="{Binding CounterStart}" Minimum="0" Increment="1" FormatString="0" />
-                        <TextBlock Grid.Column="2" Text="Step" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Text="{loc:T MassRenameWindow_Step}" VerticalAlignment="Center" />
                         <NumericUpDown Grid.Column="3" Value="{Binding CounterStep}" Minimum="1" Increment="1" FormatString="0" />
-                        <TextBlock Grid.Column="4" Text="Digits" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="4" Text="{loc:T MassRenameWindow_Digits}" VerticalAlignment="Center" />
                         <NumericUpDown Grid.Column="5" Value="{Binding CounterPadding}" Minimum="1" Maximum="10" Increment="1" FormatString="0" />
                     </Grid>
                 </StackPanel>
@@ -81,8 +82,8 @@
                     <TextBlock Text="{Binding FailureText}" Classes="dialog-error" IsVisible="{Binding HasFailures}" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <Button Classes="dialog-button" Content="Apply Rename" Command="{Binding ApplyCommand}" FontWeight="SemiBold" />
-                    <Button Classes="dialog-button" Content="Close" Click="Close_Click" IsCancel="True" />
+                    <Button Classes="dialog-button" Content="{loc:T MassRenameWindow_ApplyRename}" Command="{Binding ApplyCommand}" FontWeight="SemiBold" />
+                    <Button Classes="dialog-button" Content="{loc:T MassRenameWindow_Close}" Click="Close_Click" IsCancel="True" />
                 </StackPanel>
             </Grid>
 
@@ -97,9 +98,9 @@
                       BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
                       CornerRadius="4">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="Current name" Binding="{Binding OldName}" Width="*" x:DataType="vm:RenameItem" />
-                    <DataGridTextColumn Header="New name" Binding="{Binding NewName}" Width="*" x:DataType="vm:RenameItem" />
-                    <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" Width="1.3*" x:DataType="vm:RenameItem" />
+                    <DataGridTextColumn Header="{loc:T MassRenameWindow_CurrentName}" Binding="{Binding OldName}" Width="*" x:DataType="vm:RenameItem" />
+                    <DataGridTextColumn Header="{loc:T MassRenameWindow_NewName}" Binding="{Binding NewName}" Width="*" x:DataType="vm:RenameItem" />
+                    <DataGridTextColumn Header="{loc:T MassRenameWindow_Status}" Binding="{Binding StatusText}" Width="1.3*" x:DataType="vm:RenameItem" />
                 </DataGrid.Columns>
             </DataGrid>
         </DockPanel>

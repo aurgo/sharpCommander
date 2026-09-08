@@ -47,7 +47,7 @@ public class MainWindowTests
             Settings.Settings.LastRightPanelPath = Right;
 
             var operations = new FileOperationsService(fs, Dialogs, Trash);
-            ViewModel = new MainWindowViewModel(fs, Settings, Dialogs, Clipboard, operations, Trash, new ThemeService());
+            ViewModel = new MainWindowViewModel(fs, Settings, Dialogs, Clipboard, operations, Trash, new ThemeService(), new CompositeArchiveService(new ZipArchiveService(), new TarArchiveService()), new DirectoryComparer(), new UndoService(), new SftpConnections(), new FakeUpdateService());
             Window = new MainWindow { DataContext = ViewModel };
         }
 
@@ -105,6 +105,17 @@ public class MainWindowTests
             // F10 closes the window synchronously; a release on a closed headless window throws.
             window.KeyReleaseQwerty(key, modifiers);
         }
+    }
+
+    /// <summary>The tab chips rendered in one of the two groups of the tab bar, in order.</summary>
+    private static List<Border> TabsOf(Window window, string groupName)
+    {
+        window.UpdateLayout();
+        return window.FindControl<ItemsControl>(groupName)!
+            .GetVisualDescendants()
+            .OfType<Border>()
+            .Where(border => border.Classes.Contains("tab"))
+            .ToList();
     }
 
     /// <summary>Clicks the middle of a laid-out control with the headless mouse.</summary>
@@ -274,17 +285,18 @@ public class MainWindowTests
         using var harness = new Harness();
         await harness.ShowAsync();
         Press(harness.Window, PhysicalKey.T, RawInputModifiers.Control);
-        await WaitUntilAsync(() => harness.ViewModel.Tabs.Count == 2);
-        Assert.Same(harness.ViewModel.Tabs[1], harness.ViewModel.CurrentTab);
+        await WaitUntilAsync(() => harness.ViewModel.LeftTabs.Count == 2);
+        Assert.Same(harness.ViewModel.LeftTabs[1], harness.ViewModel.CurrentTab);
 
         Press(harness.Window, PhysicalKey.Tab, RawInputModifiers.Control);
         await PumpAsync();
-        Assert.Same(harness.ViewModel.Tabs[0], harness.ViewModel.CurrentTab);
+        Assert.Same(harness.ViewModel.LeftTabs[0], harness.ViewModel.CurrentTab);
 
         Press(harness.Window, PhysicalKey.Tab, RawInputModifiers.Control | RawInputModifiers.Shift);
         await PumpAsync();
-        Assert.Same(harness.ViewModel.Tabs[1], harness.ViewModel.CurrentTab);
-        Assert.Same(harness.ViewModel.CurrentTab, harness.Window.FindControl<TabStrip>("TabStrip")!.SelectedItem);
+        Assert.Same(harness.ViewModel.LeftTabs[1], harness.ViewModel.CurrentTab);
+        var current = TabsOf(harness.Window, "LeftTabStrip").Single(tab => tab.Classes.Contains("current"));
+        Assert.Same(harness.ViewModel.CurrentTab, current.DataContext);
     }
 
     [AvaloniaFact]
@@ -292,29 +304,35 @@ public class MainWindowTests
     {
         using var harness = new Harness();
         await harness.ShowAsync();
-        var strip = harness.Window.FindControl<TabStrip>("TabStrip")!;
-        Assert.Equal(1, strip.ItemCount);
+        var strip = harness.Window.FindControl<ItemsControl>("LeftTabStrip")!;
+
+        // Each pane starts with a tab of its own, one to a group.
+        Assert.Single(TabsOf(harness.Window, "LeftTabStrip"));
+        Assert.Single(TabsOf(harness.Window, "RightTabStrip"));
 
         var closeButtons = () => strip.GetVisualDescendants().OfType<Button>().Where(button => button.Classes.Contains("tab-close")).ToList();
         Assert.All(closeButtons(), button => Assert.False(button.IsVisible));
 
         Press(harness.Window, PhysicalKey.T, RawInputModifiers.Control);
-        await WaitUntilAsync(() => harness.ViewModel.Tabs.Count == 2);
+        await WaitUntilAsync(() => harness.ViewModel.LeftTabs.Count == 2);
 
-        Assert.Equal(2, strip.ItemCount);
-        Assert.Same(harness.ViewModel.CurrentTab, strip.SelectedItem);
-        Assert.Same(harness.ViewModel.Tabs[1], harness.ViewModel.CurrentTab);
+        // The left pane is the active one, so the new tab joins the left group and the right one is untouched.
+        var chips = TabsOf(harness.Window, "LeftTabStrip");
+        Assert.Equal(2, chips.Count);
+        Assert.Single(TabsOf(harness.Window, "RightTabStrip"));
+        Assert.Same(harness.ViewModel.LeftTabs[1], harness.ViewModel.CurrentTab);
+        Assert.Same(harness.ViewModel.CurrentTab, chips.Single(tab => tab.Classes.Contains("current")).DataContext);
         Assert.Equal(harness.Left, harness.ViewModel.LeftPanel.CurrentPath);
         Assert.Equal(2, closeButtons().Count);
         Assert.All(closeButtons(), button => Assert.True(button.IsVisible));
 
-        strip.SelectedItem = harness.ViewModel.Tabs[0];
+        Click(harness.Window, chips[0]);
         await PumpAsync();
-        Assert.Same(harness.ViewModel.Tabs[0], harness.ViewModel.CurrentTab);
+        Assert.Same(harness.ViewModel.LeftTabs[0], harness.ViewModel.CurrentTab);
     }
 
     [AvaloniaFact]
-    public async Task CtrlW_RefusesToCloseTheLastTab()
+    public async Task CtrlW_RefusesToCloseTheLastTabOfAPane()
     {
         using var harness = new Harness();
         await harness.ShowAsync();
@@ -322,16 +340,15 @@ public class MainWindowTests
         Press(harness.Window, PhysicalKey.W, RawInputModifiers.Control);
         await PumpAsync();
 
-        Assert.Single(harness.ViewModel.Tabs);
+        Assert.Single(harness.ViewModel.LeftTabs);
         Assert.Contains("last tab", harness.ViewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
 
         Press(harness.Window, PhysicalKey.T, RawInputModifiers.Control);
-        await WaitUntilAsync(() => harness.ViewModel.Tabs.Count == 2);
+        await WaitUntilAsync(() => harness.ViewModel.LeftTabs.Count == 2);
         Press(harness.Window, PhysicalKey.W, RawInputModifiers.Control);
-        await PumpAsync();
+        await WaitUntilAsync(() => harness.ViewModel.LeftTabs.Count == 1);
 
-        Assert.Single(harness.ViewModel.Tabs);
-        Assert.Equal(1, harness.Window.FindControl<TabStrip>("TabStrip")!.ItemCount);
+        Assert.Single(TabsOf(harness.Window, "LeftTabStrip"));
     }
 
     // ---- H5: column headers -----------------------------------------------------------------------------------
@@ -706,5 +723,33 @@ public class MainWindowTests
         await PumpAsync();
 
         Assert.Contains("edit", harness.ViewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ---- language ---------------------------------------------------------------------------------------------
+
+    [AvaloniaFact]
+    public async Task SwitchingLanguage_RelaysOutTheHeadersInsteadOfClippingThem()
+    {
+        using var harness = new Harness();
+        await harness.ShowAsync();
+
+        try
+        {
+            harness.ViewModel.SetLanguageCommand.Execute("es");
+            await PumpAsync();
+            harness.Window.UpdateLayout();
+
+            var header = harness.Window.GetVisualDescendants().OfType<Button>().First(b => b.Name == "NameHeader");
+            var text = header.GetVisualDescendants().OfType<TextBlock>().First();
+
+            Assert.Equal("Nombre", text.Text);
+
+            // A translated word is wider than the original; without a fresh layout it would be drawn clipped.
+            Assert.Equal(text.DesiredSize.Width, text.Bounds.Width, 1);
+        }
+        finally
+        {
+            SharpCommander.Desktop.Localization.Strings.Use("en");
+        }
     }
 }

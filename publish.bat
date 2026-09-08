@@ -3,7 +3,7 @@ setlocal enabledelayedexpansion
 
 :: SharpCommander - publish script for Windows (cmd).
 ::
-:: A thin wrapper over 'dotnet publish'. The publish configuration (self-contained, partial trimming, no debug
+:: A thin wrapper over 'dotnet publish'. The publish configuration (self-contained, single-file, partial trimming, no debug
 :: symbols) lives in src\SharpCommander.Desktop\SharpCommander.Desktop.csproj so every platform and every script
 :: ships the same binaries, and the version is read from Directory.Build.props.
 ::

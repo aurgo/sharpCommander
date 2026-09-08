@@ -92,6 +92,19 @@ public sealed class DelegatingFileSystem(IFileSystemService inner) : IFileSystem
     public Task RenameAsync(string path, string newName, CancellationToken cancellationToken = default) => inner.RenameAsync(path, newName, cancellationToken);
 
     public Task OpenInFileExplorerAsync(string path, CancellationToken cancellationToken = default) => inner.OpenInFileExplorerAsync(path, cancellationToken);
+
+    public Task<int> ApplyAttributesAsync(IReadOnlyList<string> paths, AttributeChange change, CancellationToken cancellationToken = default) => inner.ApplyAttributesAsync(paths, change, cancellationToken);
+
+    public Task<long> FindFirstDifferenceAsync(string leftPath, string rightPath, CancellationToken cancellationToken = default) => inner.FindFirstDifferenceAsync(leftPath, rightPath, cancellationToken);
+
+    /// <summary>Records the folder instead of launching a terminal, which a test must never do.</summary>
+    public List<string> TerminalsOpened { get; } = [];
+
+    public Task OpenTerminalAsync(string directory, CancellationToken cancellationToken = default)
+    {
+        TerminalsOpened.Add(directory);
+        return Task.CompletedTask;
+    }
     public Task RevealInFileExplorerAsync(string path, CancellationToken cancellationToken = default) => inner.RevealInFileExplorerAsync(path, cancellationToken);
 
     public async Task<long> GetDirectorySizeAsync(string path, IProgress<long>? progress = null, CancellationToken cancellationToken = default)

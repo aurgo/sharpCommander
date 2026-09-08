@@ -11,6 +11,13 @@ public sealed record FileSystemEntry
 
     /// <summary>Size in bytes for files; total capacity for drives; 0 for directories.</summary>
     public long Size { get; init; }
+
+    /// <summary>
+    /// The measured size of a folder, once the user has asked for it. Null while unknown, which is what the
+    /// size column shows as "&lt;DIR&gt;". Folders are never measured while listing: it would mean walking the
+    /// whole tree of every row.
+    /// </summary>
+    public long? CalculatedSize { get; init; }
     public DateTime LastModified { get; init; }
     public DateTime Created { get; init; }
     public DateTime LastAccessed { get; init; }

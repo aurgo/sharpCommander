@@ -142,11 +142,41 @@
         <Setter Property="Padding" Value="4,0" />
     </Style>
 
-    <Style Selector="TabStripItem">
-        <Setter Property="FontSize" Value="13" />
+    <!--
+        A tab is a plain Border rather than a TabStripItem: the bar holds two independent groups (left-hand and
+        right-hand tabs) and only one tab across both is current, which a selection-driven TabStrip cannot express.
+    -->
+    <Style Selector="Border.tab">
+        <Setter Property="Background" Value="Transparent" />
         <Setter Property="Padding" Value="10,4" />
         <Setter Property="MinHeight" Value="30" />
-        <Setter Property="Margin" Value="0" />
+        <Setter Property="CornerRadius" Value="4,4,0,0" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+
+    <Style Selector="Border.tab TextBlock">
+        <Setter Property="FontSize" Value="13" />
+    </Style>
+
+    <Style Selector="Border.tab:pointerover">
+        <Setter Property="Background" Value="{DynamicResource SystemControlHighlightListLowBrush}" />
+    </Style>
+
+    <Style Selector="Border.tab.current">
+        <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundAltHighBrush}" />
+    </Style>
+
+    <Style Selector="Border.tab.current TextBlock">
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <!-- A pinned tab keeps its folder, so it reads as fixed: italic and no close button. -->
+    <Style Selector="Border.tab.pinned TextBlock">
+        <Setter Property="FontStyle" Value="Italic" />
+    </Style>
+
+    <Style Selector="Border.tab.pinned Button.tab-close">
+        <Setter Property="IsVisible" Value="False" />
     </Style>
 
     <Style Selector="Button.tab-close">

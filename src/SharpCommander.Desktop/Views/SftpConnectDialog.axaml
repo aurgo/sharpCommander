@@ -1,0 +1,99 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SharpCommander.Desktop.Localization"
+        xmlns:models="using:SharpCommander.Core.Models"
+        x:Class="SharpCommander.Desktop.Views.SftpConnectDialog"
+        Title="{loc:T Sftp_Title}"
+        Width="720"
+        Height="520"
+        MinWidth="640"
+        MinHeight="460"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <!--
+        One window, like the tool this is modelled on: the saved servers on the left, the details of whichever is
+        selected on the right. Splitting "choose" and "edit" into two windows made adding the first server a
+        two-step affair for no reason.
+    -->
+    <Grid Margin="12" RowDefinitions="*,Auto" ColumnDefinitions="240,12,*">
+
+        <Border Grid.Row="0" Grid.Column="0" BorderThickness="1" CornerRadius="4"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
+            <ListBox Name="SitesList" SelectionChanged="Sites_SelectionChanged" DoubleTapped="Sites_DoubleTapped">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="models:SftpSite">
+                        <StackPanel Margin="2,3">
+                            <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding Host}" Opacity="0.6" FontSize="11" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Border>
+
+        <ScrollViewer Grid.Row="0" Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Spacing="6">
+                <TextBlock Text="{loc:T Sftp_Session}" FontWeight="SemiBold" Margin="0,0,0,4" />
+
+                <TextBlock Text="{loc:T Sftp_Protocol}" />
+                <TextBox Text="SFTP" IsReadOnly="True" IsEnabled="False" />
+
+                <Grid ColumnDefinitions="*,8,110">
+                    <StackPanel Grid.Column="0" Spacing="4">
+                        <TextBlock Text="{loc:T Sftp_Host}" />
+                        <TextBox Name="HostBox" Watermark="example.com" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Spacing="4">
+                        <TextBlock Text="{loc:T Sftp_Port}" />
+                        <TextBox Name="PortBox" Text="22" />
+                    </StackPanel>
+                </Grid>
+
+                <Grid ColumnDefinitions="*,8,*">
+                    <StackPanel Grid.Column="0" Spacing="4">
+                        <TextBlock Text="{loc:T SftpSite_User}" />
+                        <TextBox Name="UserBox" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Spacing="4">
+                        <TextBlock Text="{loc:T Sftp_Password}" />
+                        <TextBox Name="PasswordBox" PasswordChar="•" />
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock Text="{loc:T SftpSite_Name}" Margin="0,4,0,0" />
+                <TextBox Name="NameBox" Watermark="{loc:T SftpSite_NameHint}" />
+
+                <TextBlock Text="{loc:T SftpSite_Auth}" Margin="0,4,0,0" />
+                <StackPanel Orientation="Horizontal" Spacing="16">
+                    <RadioButton Name="KeyAuth" GroupName="auth" Content="{loc:T SftpSite_AuthKey}" IsChecked="True" />
+                    <RadioButton Name="PasswordAuth" GroupName="auth" Content="{loc:T SftpSite_AuthPassword}" />
+                </StackPanel>
+
+                <Grid ColumnDefinitions="*,8,*" Margin="0,4,0,0">
+                    <StackPanel Grid.Column="0" Spacing="4">
+                        <TextBlock Text="{loc:T SftpSite_KeyPath}" />
+                        <Grid ColumnDefinitions="*,4,Auto">
+                            <TextBox Grid.Column="0" Name="KeyBox" Watermark="{loc:T SftpSite_KeyHint}" />
+                            <Button Grid.Column="2" Name="BrowseKeyButton" Content="..." Click="BrowseKey_Click"
+                                    ToolTip.Tip="{loc:T Sftp_ChooseKey}" />
+                        </Grid>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Spacing="4">
+                        <TextBlock Text="{loc:T SftpSite_InitialPath}" />
+                        <TextBox Name="PathBox" Watermark="/home/usuario" />
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock Name="ErrorText" Classes="dialog-error" IsVisible="False" TextWrapping="Wrap" Margin="0,4,0,0" />
+            </StackPanel>
+        </ScrollViewer>
+
+        <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,12,0,0" ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+            <Button Grid.Column="0" Classes="dialog-button" Content="{loc:T Sftp_Save}" Click="Save_Click" />
+            <Button Grid.Column="1" Classes="dialog-button" Content="{loc:T Sftp_RemoveServer}" Click="Remove_Click" Margin="8,0,0,0" />
+            <Button Grid.Column="3" Classes="dialog-button" Content="{loc:T Sftp_Connect}" IsDefault="True" Click="Ok_Click" />
+            <Button Grid.Column="4" Classes="dialog-button" Content="{loc:T Sftp_Cancel}" IsCancel="True" Click="Cancel_Click" Margin="8,0,0,0" />
+        </Grid>
+    </Grid>
+</Window>

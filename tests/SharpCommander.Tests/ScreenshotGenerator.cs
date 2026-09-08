@@ -45,7 +45,7 @@ public class ScreenshotGenerator(ITestOutputHelper output)
         var dialogs = new FakeDialogService();
         var trash = new FakeTrashService();
         var operations = new FileOperationsService(fileSystem, dialogs, trash);
-        using var viewModel = new MainWindowViewModel(fileSystem, settings, dialogs, new FakeClipboardService(), operations, trash, new ThemeService());
+        using var viewModel = new MainWindowViewModel(fileSystem, settings, dialogs, new FakeClipboardService(), operations, trash, new ThemeService(), new CompositeArchiveService(new ZipArchiveService(), new TarArchiveService()), new DirectoryComparer(), new UndoService(), new SftpConnections(), new FakeUpdateService());
         var window = new MainWindow { DataContext = viewModel, Width = Width, Height = Height };
 
         try

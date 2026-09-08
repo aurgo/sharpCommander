@@ -1,7 +1,8 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SharpCommander.Desktop.Localization"
         x:Class="SharpCommander.Desktop.Views.InputDialog"
-        Title="Input"
+        Title="{loc:T InputDialog_Input}"
         Width="420"
         SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
@@ -9,12 +10,12 @@
         ShowInTaskbar="False">
     <Border Padding="20">
         <StackPanel Spacing="8">
-            <TextBlock Name="PromptText" Classes="dialog-message" Text="Enter a value:" />
+            <TextBlock Name="PromptText" Classes="dialog-message" Text="{loc:T InputDialog_EnterAValue}" />
             <TextBox Name="InputBox" />
             <TextBlock Name="ErrorText" Classes="dialog-error" IsVisible="False" />
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
-                <Button Name="OkButton" Classes="dialog-button" Content="OK" IsDefault="True" Click="Ok_Click" />
-                <Button Name="CancelButton" Classes="dialog-button" Content="Cancel" IsCancel="True" Click="Cancel_Click" />
+                <Button Name="OkButton" Classes="dialog-button" Content="{loc:T InputDialog_Ok}" IsDefault="True" Click="Ok_Click" />
+                <Button Name="CancelButton" Classes="dialog-button" Content="{loc:T InputDialog_Cancel}" IsCancel="True" Click="Cancel_Click" />
             </StackPanel>
         </StackPanel>
     </Border>

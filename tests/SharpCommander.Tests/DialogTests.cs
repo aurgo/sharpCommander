@@ -8,6 +8,7 @@ using Avalonia.LogicalTree;
 using Avalonia.Threading;
 using SharpCommander.Core.Models;
 using SharpCommander.Desktop.Services;
+using SharpCommander.Desktop.Localization;
 using SharpCommander.Desktop.ViewModels;
 using SharpCommander.Desktop.Views;
 using SharpCommander.Tests.Fakes;
@@ -66,7 +67,10 @@ public class DialogTests
         var grid = window.GetLogicalDescendants().OfType<DataGrid>().Single();
         Assert.NotNull(grid.Template);
         Assert.Equal(3, grid.Columns.Count);
-        Assert.Equal("Status", grid.Columns[2].Header);
+
+        // The header is localized, so compare against the catalogue rather than a literal: another test may
+        // have switched the language, which is global state.
+        Assert.Equal(Strings.Get("MassRenameWindow_Status"), grid.Columns[2].Header);
         window.Close();
     }
 

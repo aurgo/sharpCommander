@@ -1,8 +1,11 @@
+using System.Text;
+using System.Text.RegularExpressions;
+
 namespace SharpCommander.Core.Utilities;
 
 /// <summary>
 /// Path helpers shared by services and view models: normalization, platform-aware comparison,
-/// containment checks, unique-name generation and file-name validation.
+/// containment checks, unique-name generation, file-name validation and wildcard masks.
 /// </summary>
 public static class PathUtils
 {
@@ -27,6 +30,60 @@ public static class PathUtils
     /// <summary>Gets the comparer matching <see cref="PathComparison"/>.</summary>
     public static StringComparer PathComparer =>
         OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
+
+    /// <summary>
+    /// Compiles a wildcard mask into a regular expression matching a whole file name. "*" stands for any run of
+    /// characters and "?" for exactly one; everything else is literal. Several masks may be given at once,
+    /// separated by ";" or spaces ("*.cs;*.md"), and the result matches any of them. Case follows
+    /// <see cref="PathComparison"/>, so the mask behaves like the file system it is used on.
+    /// </summary>
+    public static Regex WildcardToRegex(string mask)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(mask);
+
+        var masks = mask.Split([';', ' ', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (masks.Length == 0)
+        {
+            masks = [mask];
+        }
+
+        var pattern = new StringBuilder("^(?:");
+        for (var index = 0; index < masks.Length; index++)
+        {
+            if (index > 0)
+            {
+                pattern.Append('|');
+            }
+
+            foreach (var character in masks[index])
+            {
+                switch (character)
+                {
+                    case '*':
+                        pattern.Append(".*");
+                        break;
+                    case '?':
+                        pattern.Append('.');
+                        break;
+                    default:
+                        pattern.Append(Regex.Escape(character.ToString()));
+                        break;
+                }
+            }
+        }
+
+        pattern.Append(")$");
+
+        var options = RegexOptions.CultureInvariant;
+        if (PathComparison == StringComparison.OrdinalIgnoreCase)
+        {
+            options |= RegexOptions.IgnoreCase;
+        }
+
+        // Untrusted only in the sense that the user typed it; the translation above emits no backtracking
+        // construct beyond ".*", so a timeout is belt and braces against a pathological mask.
+        return new Regex(pattern.ToString(), options, TimeSpan.FromSeconds(1));
+    }
 
     /// <summary>
     /// Returns the absolute form of <paramref name="path"/> without trailing separators.

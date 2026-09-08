@@ -36,7 +36,7 @@ public class UiSmokeTests
         var fileSystem = new FileSystemService();
         var dialogs = new FakeDialogService();
         var trash = new FakeTrashService();
-        var mainVm = new MainWindowViewModel(fileSystem, new FakeSettingsService(), dialogs, new ClipboardService(), new FileOperationsService(fileSystem, dialogs, trash), trash, new ThemeService());
+        var mainVm = new MainWindowViewModel(fileSystem, new FakeSettingsService(), dialogs, new ClipboardService(), new FileOperationsService(fileSystem, dialogs, trash), trash, new ThemeService(), new CompositeArchiveService(new ZipArchiveService(), new TarArchiveService()), new DirectoryComparer(), new UndoService(), new SftpConnections(), new FakeUpdateService());
         var panel = mainVm.LeftPanel;
         var view = new FilePanelView { DataContext = panel };
         var win = new Window { Content = view, Width = 600, Height = 400 };

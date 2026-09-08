@@ -116,7 +116,7 @@ public class AppInfrastructureTests
         var dialogs = new FakeDialogService();
         var trash = new FakeTrashService();
         var fileSystem = new FileSystemService();
-        using var vm = new MainWindowViewModel(fileSystem, new FakeSettingsService(), dialogs, new FakeClipboardService(), new FileOperationsService(fileSystem, dialogs, trash), trash, new ThemeService());
+        using var vm = new MainWindowViewModel(fileSystem, new FakeSettingsService(), dialogs, new FakeClipboardService(), new FileOperationsService(fileSystem, dialogs, trash), trash, new ThemeService(), new CompositeArchiveService(new ZipArchiveService(), new TarArchiveService()), new DirectoryComparer(), new UndoService(), new SftpConnections(), new FakeUpdateService());
         Assert.Equal(expected, vm.Version);
     }
 
@@ -136,7 +136,7 @@ public class AppInfrastructureTests
         var dialogs = new FakeDialogService();
         var trash = new FakeTrashService();
         var fileSystem = new FileSystemService();
-        using var vm = new MainWindowViewModel(fileSystem, settings, dialogs, new FakeClipboardService(), new FileOperationsService(fileSystem, dialogs, trash), trash, new ThemeService());
+        using var vm = new MainWindowViewModel(fileSystem, settings, dialogs, new FakeClipboardService(), new FileOperationsService(fileSystem, dialogs, trash), trash, new ThemeService(), new CompositeArchiveService(new ZipArchiveService(), new TarArchiveService()), new DirectoryComparer(), new UndoService(), new SftpConnections(), new FakeUpdateService());
         var application = Application.Current!;
         var original = application.RequestedThemeVariant;
 

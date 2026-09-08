@@ -1,7 +1,8 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SharpCommander.Desktop.Localization"
         x:Class="SharpCommander.Desktop.Views.ConfirmDialog"
-        Title="Confirm"
+        Title="{loc:T ConfirmDialog_Confirm}"
         Width="440"
         SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
@@ -11,8 +12,8 @@
         <StackPanel Spacing="12">
             <TextBlock Name="MessageText" Classes="dialog-message" />
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
-                <Button Name="ConfirmButton" Classes="dialog-button" Content="OK" IsDefault="True" Click="Confirm_Click" />
-                <Button Name="CancelButton" Classes="dialog-button" Content="Cancel" IsCancel="True" Click="Cancel_Click" />
+                <Button Name="ConfirmButton" Classes="dialog-button" Content="{loc:T ConfirmDialog_Ok}" IsDefault="True" Click="Confirm_Click" />
+                <Button Name="CancelButton" Classes="dialog-button" Content="{loc:T ConfirmDialog_Cancel}" IsCancel="True" Click="Cancel_Click" />
             </StackPanel>
         </StackPanel>
     </Border>

@@ -48,6 +48,12 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
     private readonly SyncedObservableCollection<FileSystemEntry> _selectedEntries = new();
     private readonly SyncedObservableCollection<NavigationHistoryItem> _history = new();
     private readonly SyncedObservableCollection<FavoriteItem> _favorites = new();
+
+    /// <summary>
+    /// Folder sizes the user has asked for, by path. Kept apart from the entries so a refresh — which the
+    /// watcher fires on any change in the folder — does not throw the measurements away.
+    /// </summary>
+    private readonly Dictionary<string, long> _folderSizes = new(PathUtils.PathComparer);
     private DispatcherTimer? _refreshTimer;
     private LoadOperation? _currentLoad;
     private bool _refreshPending;
@@ -534,6 +540,9 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
         var previousPath = CurrentPath;
         var previousWasRoot = IsRootView;
 
+        // A new folder: the measurements of the previous one no longer apply.
+        _folderSizes.Clear();
+
         _entries.ReplaceAll(Sort(entries));
         CurrentPath = directory ?? string.Empty;
         IsRootView = directory is null;
@@ -557,10 +566,25 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
 
     private void ApplyRefresh(IReadOnlyList<FileSystemEntry> entries)
     {
-        _entries.SyncTo(Sort(entries), PathKey, PathUtils.PathComparer);
+        _entries.SyncTo(Sort(WithMeasuredSizes(entries)), PathKey, PathUtils.PathComparer);
         _filteredEntries.SyncTo(VisibleEntries(), PathKey, PathUtils.PathComparer);
         RestoreSelection();
         UpdateStatus();
+    }
+
+    /// <summary>Puts the sizes already measured back on the folders of a fresh listing.</summary>
+    private IReadOnlyList<FileSystemEntry> WithMeasuredSizes(IReadOnlyList<FileSystemEntry> entries)
+    {
+        if (_folderSizes.Count == 0)
+        {
+            return entries;
+        }
+
+        return entries
+            .Select(entry => entry.EntryType == FileSystemEntryType.Directory && _folderSizes.TryGetValue(entry.FullPath, out var size)
+                ? entry with { CalculatedSize = size }
+                : entry)
+            .ToList();
     }
 
     /// <summary>After navigating up the folder we came from gets the cursor; otherwise the first row does.</summary>
@@ -900,6 +924,278 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
 
         await _fileSystemService.RevealInFileExplorerAsync(entry.FullPath);
     });
+
+    /// <summary>Copies the full paths of the selection (or of this folder) to the clipboard, one per line.</summary>
+    [RelayCommand]
+    private Task CopyPathAsync() => RunGuardedAsync("Copy path", async () =>
+    {
+        var items = GetSelectedItems();
+        var paths = items
+            .Where(item => item.EntryType is FileSystemEntryType.File or FileSystemEntryType.Directory)
+            .Select(item => item.FullPath)
+            .ToList();
+
+        if (paths.Count == 0)
+        {
+            if (IsRootView || string.IsNullOrEmpty(CurrentPath))
+            {
+                StatusText = "Select an item first.";
+                return;
+            }
+
+            paths.Add(CurrentPath);
+        }
+
+        await _clipboardService.SetTextAsync(string.Join(Environment.NewLine, paths));
+        StatusText = paths.Count == 1 ? $"Copied '{paths[0]}'." : $"Copied {paths.Count} paths.";
+    });
+
+    /// <summary>Opens a terminal in this folder, or in the selected folder when one is selected.</summary>
+    [RelayCommand]
+    private Task OpenTerminalAsync() => RunGuardedAsync("Open terminal", async () =>
+    {
+        var directory = SelectedEntry is { EntryType: FileSystemEntryType.Directory or FileSystemEntryType.Drive } entry
+            ? entry.FullPath
+            : CurrentPath;
+
+        if (IsRootView || string.IsNullOrEmpty(directory))
+        {
+            StatusText = "Open a folder first.";
+            return;
+        }
+
+        await _fileSystemService.OpenTerminalAsync(directory);
+        StatusText = $"Terminal opened in '{directory}'.";
+    });
+
+    /// <summary>
+    /// Measures the selected folders (or the one under the cursor) and shows the totals in the size column.
+    /// Walking a tree can take a while, so each folder is reported as it finishes rather than all at the end.
+    /// </summary>
+    [RelayCommand]
+    private Task CalculateFolderSizeAsync() => RunGuardedAsync("Folder size", async () =>
+    {
+        var folders = GetSelectedItems()
+            .Where(entry => entry.EntryType == FileSystemEntryType.Directory)
+            .ToList();
+
+        if (folders.Count == 0 && SelectedEntry is { EntryType: FileSystemEntryType.Directory } single)
+        {
+            folders.Add(single);
+        }
+
+        if (folders.Count == 0)
+        {
+            StatusText = "Select a folder first.";
+            return;
+        }
+
+        long total = 0;
+        foreach (var folder in folders)
+        {
+            long size;
+            try
+            {
+                size = await _fileSystemService.GetDirectorySizeAsync(folder.FullPath);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DirectoryNotFoundException)
+            {
+                // Gone or unreadable while we walked it: leave that row as it was.
+                AppLog.Warning($"The size of '{folder.FullPath}' could not be measured.", ex);
+                continue;
+            }
+
+            _folderSizes[folder.FullPath] = size;
+            total += size;
+            ShowMeasuredSize(folder, size);
+        }
+
+        StatusText = folders.Count == 1
+            ? $"'{folders[0].Name}' holds {FileSizeFormatter.Format(total)}."
+            : $"{folders.Count} folders hold {FileSizeFormatter.Format(total)}.";
+    });
+
+    /// <summary>
+    /// Swaps a folder row for one carrying its measured size. Entries are records, so the collections hold a
+    /// new instance and every list bound to them redraws that row.
+    /// </summary>
+    private void ShowMeasuredSize(FileSystemEntry folder, long size)
+    {
+        var measured = folder with { CalculatedSize = size };
+
+        Replace(_entries, folder, measured);
+        Replace(_filteredEntries, folder, measured);
+        Replace(_selectedEntries, folder, measured);
+
+        if (ReferenceEquals(SelectedEntry, folder))
+        {
+            SelectedEntry = measured;
+        }
+
+        static void Replace(ObservableCollection<FileSystemEntry> collection, FileSystemEntry old, FileSystemEntry updated)
+        {
+            var index = collection.IndexOf(old);
+            if (index >= 0)
+            {
+                collection[index] = updated;
+            }
+        }
+    }
+
+    /// <summary>Changes attributes and permissions on the selection, optionally recursing into folders.</summary>
+    [RelayCommand]
+    private Task ChangeAttributesAsync() => RunGuardedAsync("Attributes", async () =>
+    {
+        var items = GetSelectedItems()
+            .Where(item => item.EntryType is FileSystemEntryType.File or FileSystemEntryType.Directory)
+            .ToList();
+
+        if (items.Count == 0)
+        {
+            StatusText = "Select an item first.";
+            return;
+        }
+
+        var prompt = items.Count == 1
+            ? $"Change the attributes of '{items[0].Name}':"
+            : $"Change the attributes of {items.Count} items:";
+
+        // The permission boxes are seeded from the first entry, which is the only sensible guess for a batch.
+        var seed = ParseUnixMode(items[0].UnixPermissions);
+
+        if (await _dialogService.ShowAttributesDialogAsync(prompt, seed) is not { } change || change.IsEmpty)
+        {
+            return;
+        }
+
+        var changed = await _fileSystemService.ApplyAttributesAsync(items.Select(item => item.FullPath).ToList(), change);
+
+        StatusText = changed == 0
+            ? "Nothing was changed."
+            : $"Changed {changed} entr{(changed == 1 ? "y" : "ies")}.";
+
+        await RefreshAsync();
+    });
+
+    /// <summary>Reads back the "rwxr-xr-x" form the listing produced; null when it is missing or malformed.</summary>
+    private static UnixFileMode? ParseUnixMode(string? permissions)
+    {
+        if (permissions is not { Length: 9 })
+        {
+            return null;
+        }
+
+        UnixFileMode[] flags =
+        [
+            UnixFileMode.UserRead, UnixFileMode.UserWrite, UnixFileMode.UserExecute,
+            UnixFileMode.GroupRead, UnixFileMode.GroupWrite, UnixFileMode.GroupExecute,
+            UnixFileMode.OtherRead, UnixFileMode.OtherWrite, UnixFileMode.OtherExecute
+        ];
+
+        var mode = UnixFileMode.None;
+        for (var index = 0; index < flags.Length; index++)
+        {
+            // The execute column also carries setuid/setgid/sticky as s, S, t or T; only "-" means "not set".
+            if (permissions[index] != '-')
+            {
+                mode |= flags[index];
+            }
+        }
+
+        return mode;
+    }
+
+    // ---- selection by pattern ---------------------------------------------------------------------------
+
+    /// <summary>Adds every entry matching a wildcard mask to the selection ("+" on the numeric keypad).</summary>
+    [RelayCommand]
+    private Task SelectByPatternAsync() => ApplyPatternAsync(select: true);
+
+    /// <summary>Takes every entry matching a wildcard mask out of the selection ("-" on the numeric keypad).</summary>
+    [RelayCommand]
+    private Task UnselectByPatternAsync() => ApplyPatternAsync(select: false);
+
+    /// <summary>Swaps selected and unselected entries, leaving "..'" out of it.</summary>
+    [RelayCommand]
+    private void InvertSelection()
+    {
+        var selectable = FilteredEntries.Where(entry => entry.EntryType != FileSystemEntryType.ParentDirectory).ToList();
+        var inverted = selectable.Where(entry => !SelectedEntries.Contains(entry)).ToList();
+
+        ReplaceSelection(inverted);
+        StatusText = $"{inverted.Count} of {selectable.Count} selected.";
+    }
+
+    private Task ApplyPatternAsync(bool select) => RunGuardedAsync(select ? "Select" : "Unselect", async () =>
+    {
+        var mask = await _dialogService.ShowInputDialogAsync(
+            select ? "Select by pattern" : "Unselect by pattern",
+            "Wildcard mask, for example *.cs or report_*.txt:",
+            "*",
+            value => string.IsNullOrWhiteSpace(value) ? "Enter a mask." : null);
+
+        if (mask is null)
+        {
+            return;
+        }
+
+        var matcher = PathUtils.WildcardToRegex(mask.Trim());
+        var matches = FilteredEntries
+            .Where(entry => entry.EntryType != FileSystemEntryType.ParentDirectory && matcher.IsMatch(entry.Name))
+            .ToList();
+
+        if (matches.Count == 0)
+        {
+            StatusText = $"Nothing matches '{mask.Trim()}'.";
+            return;
+        }
+
+        // Start from what is selected now: the masks are meant to be applied one after another. ".." is dropped,
+        // because the cursor sits on it after a listing and it is never a legitimate part of a selection.
+        var wanted = SelectedEntries
+            .Where(entry => entry.EntryType != FileSystemEntryType.ParentDirectory)
+            .ToList();
+        foreach (var entry in matches)
+        {
+            if (select)
+            {
+                if (!wanted.Contains(entry))
+                {
+                    wanted.Add(entry);
+                }
+            }
+            else
+            {
+                wanted.Remove(entry);
+            }
+        }
+
+        ReplaceSelection(wanted);
+        StatusText = $"{matches.Count} {(select ? "added to" : "removed from")} the selection.";
+    });
+
+    /// <summary>Selects the entries with these names, dropping any that are no longer listed.</summary>
+    public void SelectNames(IEnumerable<string> names)
+    {
+        ArgumentNullException.ThrowIfNull(names);
+
+        var wanted = new HashSet<string>(names, PathUtils.PathComparer);
+        ReplaceSelection(_filteredEntries
+            .Where(entry => entry.EntryType != FileSystemEntryType.ParentDirectory && wanted.Contains(entry.Name))
+            .ToList());
+    }
+
+    /// <summary>Makes <paramref name="entries"/> the selection, keeping the cursor on something sensible.</summary>
+    private void ReplaceSelection(IReadOnlyList<FileSystemEntry> entries)
+    {
+        SelectedEntries.Clear();
+        foreach (var entry in entries)
+        {
+            SelectedEntries.Add(entry);
+        }
+
+        SelectedEntry = entries.Count > 0 ? entries[0] : null;
+    }
 
     // ---- favorites --------------------------------------------------------------------------------------
 

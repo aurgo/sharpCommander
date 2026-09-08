@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using SharpCommander.Core.Models;
@@ -51,6 +52,7 @@ public partial class MainWindow : Window
             (KeyGesture.Parse("Shift+Delete"), vm => vm.DeletePermanentCommand),
             (KeyGesture.Parse("F9"), vm => vm.SwapPanelsCommand),
             (KeyGesture.Parse("F10"), vm => vm.ExitCommand),
+            (Utilities.Shortcuts.Undo, vm => vm.UndoCommand),
             (Utilities.Shortcuts.SelectAll, vm => vm.SelectAllCommand),
             (Utilities.Shortcuts.Copy, vm => vm.CopyToClipboardCommand),
             (Utilities.Shortcuts.Cut, vm => vm.CutToClipboardCommand),
@@ -66,7 +68,14 @@ public partial class MainWindow : Window
             (Utilities.Shortcuts.NewTab, vm => vm.NewTabCommand),
             (Utilities.Shortcuts.CloseTab, vm => vm.CloseCurrentTabCommand),
             (Utilities.Shortcuts.NextTab, vm => vm.NextTabCommand),
-            (Utilities.Shortcuts.PreviousTab, vm => vm.PreviousTabCommand)
+            (Utilities.Shortcuts.PreviousTab, vm => vm.PreviousTabCommand),
+            (Utilities.Shortcuts.DuplicateTab, vm => vm.DuplicateTabCommand),
+            (Utilities.Shortcuts.CopyPath, vm => vm.ActivePanel?.CopyPathCommand),
+            (Utilities.Shortcuts.OpenTerminal, vm => vm.ActivePanel?.OpenTerminalCommand),
+            (Utilities.Shortcuts.SelectByPattern, vm => vm.ActivePanel?.SelectByPatternCommand),
+            (Utilities.Shortcuts.UnselectByPattern, vm => vm.ActivePanel?.UnselectByPatternCommand),
+            (Utilities.Shortcuts.InvertSelection, vm => vm.ActivePanel?.InvertSelectionCommand),
+            (Utilities.Shortcuts.FolderSize, vm => vm.ActivePanel?.CalculateFolderSizeCommand)
         ];
 
         // Ctrl keeps working on macOS, where the primary spelling is Cmd. The more specific gesture is already
@@ -113,6 +122,7 @@ public partial class MainWindow : Window
         if (_viewModel is not null)
         {
             _viewModel.ExitRequested -= OnExitRequested;
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         }
 
         _viewModel = DataContext as MainWindowViewModel;
@@ -120,6 +130,7 @@ public partial class MainWindow : Window
         if (_viewModel is not null)
         {
             _viewModel.ExitRequested += OnExitRequested;
+            _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         }
     }
 
@@ -262,6 +273,34 @@ public partial class MainWindow : Window
 
     // ---- keyboard shortcuts -----------------------------------------------------------------------------
 
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainWindowViewModel.CurrentLanguage))
+        {
+            RelayoutAfterLanguageChange();
+        }
+    }
+
+    /// <summary>
+    /// Re-measures the whole window after a language change. Text that grew or shrank leaves its container
+    /// arranged for the old word, so the new one is drawn clipped until every layout node is invalidated.
+    /// This hangs off this window's own view model rather than a static event: a static one would keep every
+    /// window ever created alive and fan each switch out to all of them.
+    /// </summary>
+    private void RelayoutAfterLanguageChange()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            foreach (var layoutable in this.GetVisualDescendants().OfType<Layoutable>())
+            {
+                layoutable.InvalidateMeasure();
+            }
+
+            InvalidateMeasure();
+            UpdateLayout();
+        }, DispatcherPriority.Render);
+    }
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         if (!e.Handled && _viewModel is { } viewModel)
@@ -333,10 +372,12 @@ public partial class MainWindow : Window
         _viewModel?.SetActivePanel(_viewModel.RightPanel);
     }
 
-    private void TabStrip_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    /// <summary>
+    /// Clicking a tab selects it. The close button inside the tab handles its own press, so it never reaches here.
+    /// </summary>
+    private void Tab_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        // The strip raises this while the XAML is still being populated, before the named field is assigned.
-        if (sender is TabStrip { SelectedItem: TabViewModel tab } && _viewModel is { } viewModel && !ReferenceEquals(viewModel.CurrentTab, tab))
+        if (sender is Border { DataContext: TabViewModel tab } && _viewModel is { } viewModel && !ReferenceEquals(viewModel.CurrentTab, tab))
         {
             viewModel.SelectTabCommand.Execute(tab);
         }

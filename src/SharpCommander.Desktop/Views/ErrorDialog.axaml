@@ -1,7 +1,8 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SharpCommander.Desktop.Localization"
         x:Class="SharpCommander.Desktop.Views.ErrorDialog"
-        Title="Error"
+        Title="{loc:T ErrorDialog_Error}"
         Width="520"
         SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
@@ -17,7 +18,7 @@
                 <TextBlock Name="MessageText" Classes="dialog-message" VerticalAlignment="Center" MaxWidth="430" />
             </StackPanel>
 
-            <Expander Name="DetailsExpander" Header="Details" IsVisible="False">
+            <Expander Name="DetailsExpander" Header="{loc:T ErrorDialog_Details}" IsVisible="False">
                 <StackPanel Spacing="6">
                     <TextBox Name="DetailsBox"
                              Classes="monospace"
@@ -26,12 +27,12 @@
                              TextWrapping="Wrap"
                              FontSize="12"
                              MaxHeight="220" />
-                    <Button Name="CopyButton" Content="Copy details" HorizontalAlignment="Right" Click="Copy_Click" />
+                    <Button Name="CopyButton" Content="{loc:T ErrorDialog_CopyDetails}" HorizontalAlignment="Right" Click="Copy_Click" />
                 </StackPanel>
             </Expander>
 
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,4,0,0">
-                <Button Name="OkButton" Classes="dialog-button" Content="OK" IsDefault="True" IsCancel="True" Click="Ok_Click" />
+                <Button Name="OkButton" Classes="dialog-button" Content="{loc:T ErrorDialog_Ok}" IsDefault="True" IsCancel="True" Click="Ok_Click" />
             </StackPanel>
         </StackPanel>
     </Border>

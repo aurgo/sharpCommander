@@ -12,6 +12,10 @@ namespace SharpCommander.Desktop.Services;
 [JsonSerializable(typeof(NavigationHistoryItem))]
 [JsonSerializable(typeof(List<FavoriteItem>))]
 [JsonSerializable(typeof(List<NavigationHistoryItem>))]
+[JsonSerializable(typeof(TabState))]
+[JsonSerializable(typeof(List<TabState>))]
+[JsonSerializable(typeof(SftpSite))]
+[JsonSerializable(typeof(List<SftpSite>))]
 [JsonSourceGenerationOptions(
     WriteIndented = true,
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,

@@ -34,6 +34,16 @@ public class FilePanelViewModelTests
 
     private static IEnumerable<string> Names(FilePanelViewModel panel) => panel.FilteredEntries.Select(entry => entry.Name);
 
+    /// <summary>Selects every entry but "..", the way Select All does from the main window.</summary>
+    private static void SelectEverything(FilePanelViewModel panel)
+    {
+        panel.SelectedEntries.Clear();
+        foreach (var entry in panel.FilteredEntries.Where(entry => entry.EntryType != FileSystemEntryType.ParentDirectory))
+        {
+            panel.SelectedEntries.Add(entry);
+        }
+    }
+
     private static void MakeHidden(string path)
     {
         if (OperatingSystem.IsWindows())
@@ -661,5 +671,188 @@ public class FilePanelViewModelTests
         Assert.True(fileSystem.ListingTokens.Count > listingsBeforeHold);
         Assert.False(fileSystem.ListingTokens[listingsBeforeHold].IsCancellationRequested);
         Assert.Contains("a.txt", Names(panel));
+    }
+
+    // ---- selection by pattern, copy path, terminal -----------------------------------------------------------
+
+    [AvaloniaFact]
+    public async Task SelectByPattern_AddsTheMatchesAndKeepsWhatWasSelected()
+    {
+        using var dir = new TempDir();
+        dir.File("a.cs");
+        dir.File("b.cs");
+        dir.File("c.txt");
+        dir.File("d.md");
+        var harness = new Harness();
+        harness.Dialogs.InputAnswer = "*.cs";
+        await harness.Panel.InitializeAsync(dir.Path);
+
+        await harness.Panel.SelectByPatternCommand.ExecuteAsync(null);
+
+        Assert.Equal(["a.cs", "b.cs"], harness.Panel.SelectedEntries.Select(entry => entry.Name).Order());
+        Assert.DoesNotContain(harness.Panel.SelectedEntries, entry => entry.EntryType == FileSystemEntryType.ParentDirectory);
+
+        // A second mask adds to the selection rather than replacing it.
+        harness.Dialogs.InputAnswer = "*.md";
+        await harness.Panel.SelectByPatternCommand.ExecuteAsync(null);
+
+        Assert.Equal(["a.cs", "b.cs", "d.md"], harness.Panel.SelectedEntries.Select(entry => entry.Name).Order());
+    }
+
+    [AvaloniaFact]
+    public async Task UnselectByPattern_TakesTheMatchesOut()
+    {
+        using var dir = new TempDir();
+        dir.File("a.cs");
+        dir.File("b.txt");
+        var harness = new Harness();
+        await harness.Panel.InitializeAsync(dir.Path);
+        SelectEverything(harness.Panel);
+
+        harness.Dialogs.InputAnswer = "*.txt";
+        await harness.Panel.UnselectByPatternCommand.ExecuteAsync(null);
+
+        Assert.Equal(["a.cs"], harness.Panel.SelectedEntries.Select(entry => entry.Name));
+    }
+
+    [AvaloniaFact]
+    public async Task SelectByPattern_CancelledLeavesTheSelectionAlone()
+    {
+        using var dir = new TempDir();
+        dir.File("a.cs");
+        var harness = new Harness();
+        harness.Dialogs.InputAnswer = null;
+        await harness.Panel.InitializeAsync(dir.Path);
+
+        await harness.Panel.SelectByPatternCommand.ExecuteAsync(null);
+
+        Assert.DoesNotContain(harness.Panel.SelectedEntries, entry => entry.Name == "a.cs");
+    }
+
+    [AvaloniaFact]
+    public async Task InvertSelection_SwapsTheSelectionAndSkipsTheParentEntry()
+    {
+        using var dir = new TempDir();
+        var child = dir.Dir("child");
+        dir.File("child/a.txt");
+        dir.File("child/b.txt");
+        var harness = new Harness();
+        await harness.Panel.InitializeAsync(child);
+        harness.Panel.SelectedEntries.Add(harness.Panel.FilteredEntries.Single(entry => entry.Name == "a.txt"));
+
+        harness.Panel.InvertSelectionCommand.Execute(null);
+
+        Assert.Equal(["b.txt"], harness.Panel.SelectedEntries.Select(entry => entry.Name));
+        Assert.DoesNotContain(harness.Panel.SelectedEntries, entry => entry.EntryType == FileSystemEntryType.ParentDirectory);
+    }
+
+    [AvaloniaFact]
+    public async Task CopyPath_WritesTheSelectionOnePerLine()
+    {
+        using var dir = new TempDir();
+        var a = dir.File("a.txt");
+        var b = dir.File("b.txt");
+        var harness = new Harness();
+        await harness.Panel.InitializeAsync(dir.Path);
+        SelectEverything(harness.Panel);
+
+        await harness.Panel.CopyPathCommand.ExecuteAsync(null);
+
+        Assert.Equal(string.Join(Environment.NewLine, [a, b]), harness.Clipboard.Text);
+    }
+
+    [AvaloniaFact]
+    public async Task CopyPath_FallsBackToTheCurrentFolder()
+    {
+        using var dir = new TempDir();
+        var harness = new Harness();
+        await harness.Panel.InitializeAsync(dir.Path);
+
+        await harness.Panel.CopyPathCommand.ExecuteAsync(null);
+
+        Assert.Equal(dir.Path, harness.Clipboard.Text);
+    }
+
+    [AvaloniaFact]
+    public async Task OpenTerminal_UsesTheSelectedFolderOrTheCurrentOne()
+    {
+        using var dir = new TempDir();
+        var child = dir.Dir("child");
+        var fileSystem = new DelegatingFileSystem(RealFileSystem);
+        var harness = new Harness(fileSystem);
+        await harness.Panel.InitializeAsync(dir.Path);
+
+        await harness.Panel.OpenTerminalCommand.ExecuteAsync(null);
+        Assert.Equal([dir.Path], fileSystem.TerminalsOpened);
+
+        harness.Panel.SelectedEntry = harness.Panel.FilteredEntries.Single(entry => entry.Name == "child");
+        await harness.Panel.OpenTerminalCommand.ExecuteAsync(null);
+        Assert.Equal([dir.Path, child], fileSystem.TerminalsOpened);
+    }
+
+    // ---- folder size ----------------------------------------------------------------------------------------
+
+    [AvaloniaFact]
+    public async Task CalculateFolderSize_ShowsTheTotalOnTheRow()
+    {
+        using var dir = new TempDir();
+        dir.File("box/a.txt", new string('x', 100));
+        dir.File("box/deep/b.txt", new string('y', 50));
+        var harness = new Harness();
+        await harness.Panel.InitializeAsync(dir.Path);
+        harness.Panel.SelectedEntry = harness.Panel.FilteredEntries.Single(entry => entry.Name == "box");
+
+        await harness.Panel.CalculateFolderSizeCommand.ExecuteAsync(null);
+
+        var box = harness.Panel.FilteredEntries.Single(entry => entry.Name == "box");
+        Assert.Equal(150, box.CalculatedSize);
+    }
+
+    [AvaloniaFact]
+    public async Task CalculateFolderSize_SurvivesARefresh()
+    {
+        using var dir = new TempDir();
+        dir.File("box/a.txt", new string('x', 100));
+        var harness = new Harness();
+        await harness.Panel.InitializeAsync(dir.Path);
+        harness.Panel.SelectedEntry = harness.Panel.FilteredEntries.Single(entry => entry.Name == "box");
+        await harness.Panel.CalculateFolderSizeCommand.ExecuteAsync(null);
+
+        await harness.Panel.RefreshAsync();
+
+        var box = harness.Panel.FilteredEntries.Single(entry => entry.Name == "box");
+        Assert.Equal(100, box.CalculatedSize);
+    }
+
+    [AvaloniaFact]
+    public async Task CalculateFolderSize_IsForgottenOnNavigation()
+    {
+        using var dir = new TempDir();
+        var other = dir.Dir("other");
+        dir.File("box/a.txt", new string('x', 100));
+        var harness = new Harness();
+        await harness.Panel.InitializeAsync(dir.Path);
+        harness.Panel.SelectedEntry = harness.Panel.FilteredEntries.Single(entry => entry.Name == "box");
+        await harness.Panel.CalculateFolderSizeCommand.ExecuteAsync(null);
+
+        await harness.Panel.NavigateToAsync(other);
+        await harness.Panel.NavigateToAsync(dir.Path);
+
+        var box = harness.Panel.FilteredEntries.Single(entry => entry.Name == "box");
+        Assert.Null(box.CalculatedSize);
+    }
+
+    [AvaloniaFact]
+    public async Task CalculateFolderSize_SaysSoWhenNothingIsAFolder()
+    {
+        using var dir = new TempDir();
+        dir.File("a.txt");
+        var harness = new Harness();
+        await harness.Panel.InitializeAsync(dir.Path);
+        harness.Panel.SelectedEntry = harness.Panel.FilteredEntries.Single(entry => entry.Name == "a.txt");
+
+        await harness.Panel.CalculateFolderSizeCommand.ExecuteAsync(null);
+
+        Assert.Contains("Select a folder", harness.Panel.StatusText, StringComparison.OrdinalIgnoreCase);
     }
 }

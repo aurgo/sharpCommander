@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SharpCommander.Desktop.Localization"
         xmlns:sys="using:System"
         xmlns:vm="using:SharpCommander.Desktop.ViewModels"
         x:Class="SharpCommander.Desktop.Views.ViewerWindow"
@@ -20,13 +21,13 @@
                 <TextBox Grid.Column="1"
                          Name="FindBox"
                          Width="240"
-                         Watermark="Find (Ctrl+F)"
+                         Watermark="{loc:T ViewerWindow_FindCtrlF}"
                          Text="{Binding FindText}"
                          IsEnabled="{Binding !IsBinary}"
                          KeyDown="FindBox_KeyDown" />
-                <Button Grid.Column="2" Content="Next" Command="{Binding FindNextCommand}" ToolTip.Tip="Next match (F3)" />
+                <Button Grid.Column="2" Content="{loc:T ViewerWindow_Next}" Command="{Binding FindNextCommand}" ToolTip.Tip="{loc:T ViewerWindow_NextMatchF3}" />
                 <TextBlock Grid.Column="3" Text="{Binding FindStatus}" Classes="dialog-secondary" VerticalAlignment="Center" MinWidth="60" />
-                <CheckBox Grid.Column="4" Content="Wrap lines" IsChecked="{Binding WordWrap}" IsEnabled="{Binding !IsBinary}" Margin="8,0,4,0" />
+                <CheckBox Grid.Column="4" Content="{loc:T ViewerWindow_WrapLines}" IsChecked="{Binding WordWrap}" IsEnabled="{Binding !IsBinary}" Margin="8,0,4,0" />
             </Grid>
         </Border>
 

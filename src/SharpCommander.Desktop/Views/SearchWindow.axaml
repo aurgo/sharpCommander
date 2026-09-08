@@ -1,11 +1,12 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SharpCommander.Desktop.Localization"
         xmlns:vm="using:SharpCommander.Desktop.ViewModels"
         xmlns:models="using:SharpCommander.Core.Models"
         xmlns:util="using:SharpCommander.Desktop.Utilities"
         x:Class="SharpCommander.Desktop.Views.SearchWindow"
         x:DataType="vm:SearchViewModel"
-        Title="Advanced Search"
+        Title="{loc:T SearchWindow_AdvancedSearch}"
         Width="680" Height="560"
         MinWidth="480" MinHeight="380"
         WindowStartupLocation="CenterOwner">
@@ -13,25 +14,25 @@
     <Border Padding="16">
         <DockPanel>
             <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="8">
-                <TextBlock Grid.Row="0" Grid.Column="0" Text="Search in:" VerticalAlignment="Center" />
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:T SearchWindow_SearchIn}" VerticalAlignment="Center" />
                 <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding SearchPath}" IsEnabled="{Binding !IsSearching}" />
 
-                <TextBlock Grid.Row="1" Grid.Column="0" Text="File name:" VerticalAlignment="Center" />
-                <TextBox Grid.Row="1" Grid.Column="1" Name="PatternBox" Text="{Binding FileNamePattern}" IsEnabled="{Binding !IsSearching}" Watermark="Pattern with * and ? (for example *.txt)" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:T SearchWindow_FileName}" VerticalAlignment="Center" />
+                <TextBox Grid.Row="1" Grid.Column="1" Name="PatternBox" Text="{Binding FileNamePattern}" IsEnabled="{Binding !IsSearching}" Watermark="{loc:T SearchWindow_PatternWithAndForExampleTxt}" />
 
-                <TextBlock Grid.Row="2" Grid.Column="0" Text="Containing:" VerticalAlignment="Center" />
-                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding ContentPattern}" IsEnabled="{Binding !IsSearching}" Watermark="Text that the file must contain (optional)" />
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:T SearchWindow_Containing}" VerticalAlignment="Center" />
+                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding ContentPattern}" IsEnabled="{Binding !IsSearching}" Watermark="{loc:T SearchWindow_TextThatTheFileMustContain}" />
 
-                <CheckBox Grid.Row="3" Grid.Column="1" Content="File name is a regular expression" IsChecked="{Binding UseRegex}" IsEnabled="{Binding !IsSearching}" />
+                <CheckBox Grid.Row="3" Grid.Column="1" Content="{loc:T SearchWindow_FileNameIsARegularExpression}" IsChecked="{Binding UseRegex}" IsEnabled="{Binding !IsSearching}" />
             </Grid>
 
             <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,Auto" Margin="0,10,0,0">
                 <TextBlock Grid.Column="0" Text="{Binding StatusText}" Classes="dialog-secondary" VerticalAlignment="Center" />
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                    <Button Classes="dialog-button" Content="Start" Command="{Binding StartSearchCommand}" IsDefault="True" IsVisible="{Binding !IsSearching}" />
-                    <Button Classes="dialog-button" Content="Cancel" Command="{Binding CancelSearchCommand}" IsVisible="{Binding IsSearching}" />
-                    <Button Classes="dialog-button" Content="Go to" Command="{Binding ActivateResultCommand}" ToolTip.Tip="Show the selected result in the panel (Enter or double-click)" />
-                    <Button Classes="dialog-button" Content="Close" Click="Close_Click" IsCancel="True" />
+                    <Button Classes="dialog-button" Content="{loc:T SearchWindow_Start}" Command="{Binding StartSearchCommand}" IsDefault="True" IsVisible="{Binding !IsSearching}" />
+                    <Button Classes="dialog-button" Content="{loc:T SearchWindow_Cancel}" Command="{Binding CancelSearchCommand}" IsVisible="{Binding IsSearching}" />
+                    <Button Classes="dialog-button" Content="{loc:T SearchWindow_GoTo}" Command="{Binding ActivateResultCommand}" ToolTip.Tip="{loc:T SearchWindow_ShowTheSelectedResultInThe}" />
+                    <Button Classes="dialog-button" Content="{loc:T SearchWindow_Close}" Click="Close_Click" IsCancel="True" />
                 </StackPanel>
             </Grid>
 

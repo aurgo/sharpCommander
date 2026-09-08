@@ -1,8 +1,10 @@
 using Avalonia;
 using Avalonia.Headless.XUnit;
 using Avalonia.Styling;
+using Avalonia.Threading;
 using SharpCommander.Core.Interfaces;
 using SharpCommander.Core.Models;
+using SharpCommander.Desktop.Localization;
 using SharpCommander.Desktop.Services;
 using SharpCommander.Desktop.ViewModels;
 using SharpCommander.Tests.Fakes;
@@ -21,15 +23,34 @@ public class MainWindowViewModelTests
         public FakeDialogService Dialogs { get; } = new();
         public FakeClipboardService Clipboard { get; } = new();
         public FakeTrashService Trash { get; } = new();
+        public FakeUpdateService Updates { get; } = new();
         public MainWindowViewModel ViewModel { get; }
 
         public Harness()
         {
             var operations = new FileOperationsService(FileSystem, Dialogs, Trash);
-            ViewModel = new MainWindowViewModel(FileSystem, Settings, Dialogs, Clipboard, operations, Trash, new ThemeService());
+            ViewModel = new MainWindowViewModel(FileSystem, Settings, Dialogs, Clipboard, operations, Trash, new ThemeService(), new CompositeArchiveService(new ZipArchiveService(), new TarArchiveService()), new DirectoryComparer(), new UndoService(), new SftpConnections(), Updates);
         }
 
         public void Dispose() => ViewModel.Dispose();
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 5000)
+    {
+        var deadline = Environment.TickCount64 + timeoutMs;
+        while (!condition() && Environment.TickCount64 < deadline)
+        {
+            Dispatcher.UIThread.RunJobs();
+            await Task.Delay(25);
+        }
+
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    /// <summary>Puts the two panes on the given folders; the panels are shared by every tab.</summary>
+    private static Task GoAsync(MainWindowViewModel vm, string leftPath, string rightPath)
+    {
+        return Task.WhenAll(vm.LeftPanel.InitializeAsync(leftPath), vm.RightPanel.InitializeAsync(rightPath));
     }
 
     private static void Select(FilePanelViewModel panel, string name)
@@ -40,19 +61,66 @@ public class MainWindowViewModelTests
         panel.SelectedEntries.Add(entry);
     }
 
-    // ---- M12: panels belong to tabs ---------------------------------------------------------------------
+    // ---- M12: the two panes are shared, a tab is a folder remembered for one of them --------------------
 
     [AvaloniaFact]
-    public void Panels_AreTheCurrentTabsPanels()
+    public void EachPane_StartsWithOneTabOfItsOwn()
     {
         using var harness = new Harness();
         var vm = harness.ViewModel;
 
-        var tab = Assert.Single(vm.Tabs);
-        Assert.Same(tab, vm.CurrentTab);
-        Assert.Same(tab.LeftPanel, vm.LeftPanel);
-        Assert.Same(tab.RightPanel, vm.RightPanel);
-        Assert.Same(tab.LeftPanel, vm.ActivePanel);
+        Assert.Equal(2, vm.Tabs.Count);
+        Assert.Equal(PanelSide.Left, Assert.Single(vm.LeftTabs).Side);
+        Assert.Equal(PanelSide.Right, Assert.Single(vm.RightTabs).Side);
+        Assert.Same(vm.LeftTabs[0], vm.CurrentTab);
+        Assert.Same(vm.LeftPanel, vm.ActivePanel);
+    }
+
+    [AvaloniaFact]
+    public async Task SwitchingTab_LeavesTheOppositePaneWhereItWas()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        var target = dir.Dir("left/target");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+        var firstLeftTab = vm.LeftTabs[0];
+
+        // A second left-hand tab, then move the right pane somewhere of its own.
+        await vm.OpenInNewTabAsync(vm.LeftPanel, vm.LeftPanel.FilteredEntries.Single(e => e.Name == "target"));
+        await vm.RightPanel.NavigateToCommand.ExecuteAsync(dir.Path);
+        Assert.Equal(target, vm.LeftPanel.CurrentPath);
+        Assert.Equal(dir.Path, vm.RightPanel.CurrentPath);
+
+        await vm.SelectTabCommand.ExecuteAsync(firstLeftTab);
+
+        // Only the left pane moved back; the right one is untouched.
+        Assert.Equal(left, vm.LeftPanel.CurrentPath);
+        Assert.Equal(dir.Path, vm.RightPanel.CurrentPath);
+    }
+
+    [AvaloniaFact]
+    public async Task SwitchingTab_RemembersWhereItsOwnPaneWas()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        var target = dir.Dir("left/target");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+        var firstLeftTab = vm.LeftTabs[0];
+
+        await vm.OpenInNewTabAsync(vm.LeftPanel, vm.LeftPanel.FilteredEntries.Single(e => e.Name == "target"));
+        var secondLeftTab = vm.LeftTabs[1];
+
+        await vm.SelectTabCommand.ExecuteAsync(firstLeftTab);
+        Assert.Equal(left, vm.LeftPanel.CurrentPath);
+
+        await vm.SelectTabCommand.ExecuteAsync(secondLeftTab);
+        Assert.Equal(target, vm.LeftPanel.CurrentPath);
     }
 
     [AvaloniaFact]
@@ -64,82 +132,259 @@ public class MainWindowViewModelTests
         vm.SetActivePanel(vm.RightPanel);
 
         Assert.Same(vm.RightPanel, vm.ActivePanel);
-        Assert.Same(vm.RightPanel, vm.CurrentTab!.ActivePanel);
+        Assert.Equal(PanelSide.Right, vm.CurrentTab!.Side);
     }
 
     // ---- H6: tabs -----------------------------------------------------------------------------------------
 
     [AvaloniaFact]
-    public async Task NewTab_OpensWithTheCurrentPathsAndBecomesCurrent()
+    public async Task NewTab_OpensOnTheActivePaneAndBecomesCurrent()
     {
         using var dir = new TempDir();
         var left = dir.Dir("left");
         var right = dir.Dir("right");
         using var harness = new Harness();
         var vm = harness.ViewModel;
-        await vm.CurrentTab!.InitializeAsync(left, right);
+        await GoAsync(vm, left, right);
 
         await vm.NewTabCommand.ExecuteAsync(null);
 
-        Assert.Equal(2, vm.Tabs.Count);
-        Assert.Same(vm.Tabs[1], vm.CurrentTab);
-        Assert.Same(vm.CurrentTab.LeftPanel, vm.LeftPanel);
-        Assert.Same(vm.CurrentTab.RightPanel, vm.RightPanel);
+        Assert.Equal(3, vm.Tabs.Count);
+        Assert.Equal(2, vm.LeftTabs.Count);
+        Assert.Same(vm.LeftTabs[1], vm.CurrentTab);
+        Assert.Equal(PanelSide.Left, vm.CurrentTab!.Side);
         Assert.Equal(left, vm.LeftPanel.CurrentPath);
         Assert.Equal(right, vm.RightPanel.CurrentPath);
     }
 
     [AvaloniaFact]
-    public void CloseTab_RefusesTheLastTab()
+    public async Task OpenInNewTab_PutsTheFolderInTheClickedPanelAndKeepsTheOther()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        var target = dir.Dir("left/target");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+        var entry = vm.LeftPanel.FilteredEntries.Single(e => e.Name == "target");
+
+        await vm.OpenInNewTabAsync(vm.LeftPanel, entry);
+
+        Assert.Equal(2, vm.LeftTabs.Count);
+        Assert.Same(vm.LeftTabs[1], vm.CurrentTab);
+        Assert.Equal(target, vm.LeftPanel.CurrentPath);
+        Assert.Equal(right, vm.RightPanel.CurrentPath);
+    }
+
+    [AvaloniaFact]
+    public async Task OpenInNewTab_OpensIntoTheRightPanelWhenThatIsTheActiveOne()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        var target = dir.Dir("right/target");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+        vm.SetActivePanel(vm.RightPanel);
+        var entry = vm.RightPanel.FilteredEntries.Single(e => e.Name == "target");
+
+        await vm.OpenInNewTabAsync(vm.RightPanel, entry);
+
+        Assert.Equal(2, vm.RightTabs.Count);
+        Assert.Equal(left, vm.LeftPanel.CurrentPath);
+        Assert.Equal(target, vm.RightPanel.CurrentPath);
+    }
+
+    [AvaloniaFact]
+    public async Task OpenInNewTab_LeavesTheOriginalTabWhereItWas()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        dir.Dir("left/target");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+        var first = vm.Tabs[0];
+        var entry = vm.LeftPanel.FilteredEntries.Single(e => e.Name == "target");
+
+        await vm.OpenInNewTabAsync(vm.LeftPanel, entry);
+
+        Assert.Equal(left, first.Path);
+        Assert.Equal(right, vm.RightPanel.CurrentPath);
+    }
+
+    [AvaloniaFact]
+    public async Task OpenInNewTab_RefusesAFile()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        dir.File("left/note.txt", "x");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, left);
+        var entry = vm.LeftPanel.FilteredEntries.Single(e => e.Name == "note.txt");
+
+        await vm.OpenInNewTabAsync(vm.LeftPanel, entry);
+
+        Assert.Single(vm.LeftTabs);
+        Assert.Equal(left, vm.LeftPanel.CurrentPath);
+    }
+
+    [AvaloniaFact]
+    public async Task OpenInNewTab_FollowsTheParentEntryToTheParentFolder()
+    {
+        using var dir = new TempDir();
+        var parent = dir.Dir("parent");
+        var child = dir.Dir("parent/child");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, child, child);
+        var entry = vm.LeftPanel.FilteredEntries.Single(e => e.EntryType == FileSystemEntryType.ParentDirectory);
+
+        await vm.OpenInNewTabAsync(vm.LeftPanel, entry);
+
+        Assert.Equal(2, vm.LeftTabs.Count);
+        Assert.Equal(parent, vm.LeftPanel.CurrentPath);
+    }
+
+    [AvaloniaFact]
+    public async Task OpenInNewTab_UsesTheClickedPanelNotTheFocusedOne()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        var target = dir.Dir("left/target");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+        vm.SetActivePanel(vm.RightPanel);
+        var entry = vm.LeftPanel.FilteredEntries.Single(e => e.Name == "target");
+
+        await vm.OpenInNewTabAsync(vm.LeftPanel, entry);
+
+        Assert.Equal(target, vm.LeftPanel.CurrentPath);
+        Assert.Equal(right, vm.RightPanel.CurrentPath);
+    }
+
+    [AvaloniaFact]
+    public async Task OpenInNewTab_MakesTheOwningSideTheActivePanel()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        dir.Dir("right/target");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+        var entry = vm.RightPanel.FilteredEntries.Single(e => e.Name == "target");
+
+        await vm.OpenInNewTabAsync(vm.RightPanel, entry);
+
+        Assert.Same(vm.RightPanel, vm.ActivePanel);
+    }
+
+    [AvaloniaFact]
+    public async Task NewTab_KeepsTheSideThatHadTheFocus()
+    {
+        using var dir = new TempDir();
+        var path = dir.Dir("both");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, path, path);
+        vm.SetActivePanel(vm.RightPanel);
+
+        await vm.NewTabCommand.ExecuteAsync(null);
+
+        Assert.Same(vm.RightPanel, vm.ActivePanel);
+    }
+
+    [AvaloniaFact]
+    public async Task SelectTab_ReturnsTheFocusToTheSideTheTabBelongsTo()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        dir.Dir("right/target");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+        var first = vm.LeftTabs[0];
+        var entry = vm.RightPanel.FilteredEntries.Single(e => e.Name == "target");
+
+        // Opened from the right panel, so that tab belongs to the right side; the first one still belongs to the left.
+        await vm.OpenInNewTabAsync(vm.RightPanel, entry);
+        var second = vm.RightTabs[1];
+        Assert.Same(vm.RightPanel, vm.ActivePanel);
+
+        await vm.SelectTabCommand.ExecuteAsync(first);
+        Assert.Same(vm.LeftPanel, vm.ActivePanel);
+
+        await vm.SelectTabCommand.ExecuteAsync(second);
+        Assert.Same(vm.RightPanel, vm.ActivePanel);
+    }
+
+    [AvaloniaFact]
+    public async Task CloseTab_RefusesTheLastTabOfAPane()
     {
         using var harness = new Harness();
         var vm = harness.ViewModel;
 
-        vm.CloseCurrentTabCommand.Execute(null);
-        vm.CloseTabCommand.Execute(vm.CurrentTab);
+        await vm.CloseCurrentTabCommand.ExecuteAsync(null);
+        await vm.CloseTabCommand.ExecuteAsync(vm.CurrentTab);
 
-        Assert.Single(vm.Tabs);
+        Assert.Single(vm.LeftTabs);
+        Assert.Single(vm.RightTabs);
         Assert.Contains("last tab", vm.StatusMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     [AvaloniaFact]
-    public async Task CloseTab_SwitchesToTheNeighbourAndDisposesIt()
+    public async Task CloseTab_FallsBackToTheNeighbourOfTheSamePane()
     {
         using var harness = new Harness();
         var vm = harness.ViewModel;
-        var first = vm.CurrentTab!;
+        var first = vm.LeftTabs[0];
         await vm.NewTabCommand.ExecuteAsync(null);
         await vm.NewTabCommand.ExecuteAsync(null);
         var third = vm.CurrentTab!;
+        Assert.Equal(3, vm.LeftTabs.Count);
 
-        vm.CloseCurrentTabCommand.Execute(null);
+        await vm.CloseCurrentTabCommand.ExecuteAsync(null);
 
-        Assert.Equal(2, vm.Tabs.Count);
-        Assert.Same(vm.Tabs[1], vm.CurrentTab);
+        Assert.Equal(2, vm.LeftTabs.Count);
+        Assert.Same(vm.LeftTabs[1], vm.CurrentTab);
         Assert.DoesNotContain(third, vm.Tabs);
 
-        vm.SelectTabCommand.Execute(first);
+        await vm.SelectTabCommand.ExecuteAsync(first);
         Assert.Same(first, vm.CurrentTab);
-        vm.CloseTabCommand.Execute(vm.Tabs[1]);
+
+        // Closing a tab that is not the one on screen leaves the current one alone.
+        await vm.CloseTabCommand.ExecuteAsync(vm.LeftTabs[1]);
         Assert.Same(first, vm.CurrentTab);
-        Assert.Same(first.LeftPanel, vm.LeftPanel);
+        Assert.Same(vm.LeftPanel, vm.ActivePanel);
     }
 
     [AvaloniaFact]
-    public async Task NextAndPreviousTab_Cycle()
+    public async Task NextAndPreviousTab_CycleWithinTheActivePane()
     {
         using var harness = new Harness();
         var vm = harness.ViewModel;
         await vm.NewTabCommand.ExecuteAsync(null);
+        Assert.Equal(2, vm.LeftTabs.Count);
 
-        vm.NextTabCommand.Execute(null);
-        Assert.Same(vm.Tabs[0], vm.CurrentTab);
-        vm.PreviousTabCommand.Execute(null);
-        Assert.Same(vm.Tabs[1], vm.CurrentTab);
+        await vm.NextTabCommand.ExecuteAsync(null);
+        Assert.Same(vm.LeftTabs[0], vm.CurrentTab);
+        await vm.PreviousTabCommand.ExecuteAsync(null);
+        Assert.Same(vm.LeftTabs[1], vm.CurrentTab);
+
+        // The right-hand tab is never reached from the left pane.
+        Assert.DoesNotContain(vm.CurrentTab, vm.RightTabs);
     }
 
     [AvaloniaFact]
-    public async Task TabTitle_FollowsTheActivePanelsFolder()
+    public async Task TabTitle_FollowsTheFolderOfTheSideTheTabBelongsTo()
     {
         using var dir = new TempDir();
         var projects = dir.Dir("Projects");
@@ -148,17 +393,91 @@ public class MainWindowViewModelTests
         var vm = harness.ViewModel;
         var tab = vm.CurrentTab!;
 
-        await tab.InitializeAsync(dir.Path, projects);
+        await GoAsync(vm, dir.Path, projects);
+        Assert.Equal(PanelSide.Left, tab.Side);
         Assert.Equal(Path.GetFileName(dir.Path), tab.Title);
 
+        // Moving the focus to the other pane does not rename the tab: it still belongs to the left one.
         vm.SetActivePanel(vm.RightPanel);
-        Assert.Equal("Projects", tab.Title);
+        Assert.Equal(Path.GetFileName(dir.Path), tab.Title);
 
-        await vm.RightPanel.NavigateToCommand.ExecuteAsync(photos);
+        await vm.LeftPanel.NavigateToCommand.ExecuteAsync(photos);
         Assert.Equal("Photos", tab.Title);
 
-        await vm.RightPanel.NavigateToCommand.ExecuteAsync(string.Empty);
+        await vm.LeftPanel.NavigateToCommand.ExecuteAsync(string.Empty);
         Assert.Equal("Computer", tab.Title);
+    }
+
+    [AvaloniaFact]
+    public async Task TabTitle_OfARightHandTabFollowsTheRightPanel()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        dir.Dir("right/Photos");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+        var entry = vm.RightPanel.FilteredEntries.Single(e => e.Name == "Photos");
+
+        await vm.OpenInNewTabAsync(vm.RightPanel, entry);
+
+        var tab = vm.CurrentTab!;
+        Assert.Equal(PanelSide.Right, tab.Side);
+        Assert.Equal("Photos", tab.Title);
+    }
+
+    [AvaloniaFact]
+    public async Task Tabs_AreGroupedByTheSideTheyBelongTo()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        dir.Dir("left/a");
+        dir.Dir("right/b");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+        var first = vm.LeftTabs[0];
+        var firstRight = vm.RightTabs[0];
+
+        await vm.OpenInNewTabAsync(vm.LeftPanel, vm.LeftPanel.FilteredEntries.Single(e => e.Name == "a"));
+        var fromLeft = vm.CurrentTab!;
+        await vm.OpenInNewTabAsync(vm.RightPanel, vm.RightPanel.FilteredEntries.Single(e => e.Name == "b"));
+        var fromRight = vm.CurrentTab!;
+
+        Assert.Equal([first, fromLeft], vm.LeftTabs);
+        Assert.Equal([firstRight, fromRight], vm.RightTabs);
+        Assert.Equal(4, vm.Tabs.Count);
+
+        await vm.CloseTabCommand.ExecuteAsync(fromRight);
+
+        Assert.Equal([firstRight], vm.RightTabs);
+        Assert.Equal([first, fromLeft], vm.LeftTabs);
+        Assert.Equal(3, vm.Tabs.Count);
+    }
+
+    [AvaloniaFact]
+    public async Task CurrentTab_IsTheOnlyOneMarkedCurrent()
+    {
+        using var dir = new TempDir();
+        var path = dir.Dir("both");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, path, path);
+        var first = vm.LeftTabs[0];
+
+        await vm.NewTabCommand.ExecuteAsync(null);
+
+        Assert.False(first.IsCurrent);
+        Assert.True(vm.LeftTabs[1].IsCurrent);
+        Assert.Single(vm.Tabs, tab => tab.IsCurrent);
+
+        await vm.SelectTabCommand.ExecuteAsync(first);
+
+        Assert.True(first.IsCurrent);
+        Assert.False(vm.LeftTabs[1].IsCurrent);
+        Assert.Single(vm.Tabs, tab => tab.IsCurrent);
     }
 
     [AvaloniaFact]
@@ -182,7 +501,7 @@ public class MainWindowViewModelTests
         var destination = dir.Dir("dst");
         using var harness = new Harness();
         var vm = harness.ViewModel;
-        await vm.CurrentTab!.InitializeAsync(source, destination);
+        await GoAsync(vm, source, destination);
 
         vm.SetActivePanel(vm.LeftPanel);
         Select(vm.LeftPanel, "a.txt");
@@ -210,7 +529,7 @@ public class MainWindowViewModelTests
         var destination = dir.Dir("dst");
         using var harness = new Harness();
         var vm = harness.ViewModel;
-        await vm.CurrentTab!.InitializeAsync(source, destination);
+        await GoAsync(vm, source, destination);
 
         vm.SetActivePanel(vm.LeftPanel);
         Select(vm.LeftPanel, "a.txt");
@@ -232,7 +551,7 @@ public class MainWindowViewModelTests
         var file = dir.File("a.txt", "safe");
         using var harness = new Harness();
         var vm = harness.ViewModel;
-        await vm.CurrentTab!.InitializeAsync(dir.Path, dir.Path);
+        await GoAsync(vm, dir.Path, dir.Path);
         vm.SetActivePanel(vm.LeftPanel);
         Select(vm.LeftPanel, "a.txt");
 
@@ -251,7 +570,7 @@ public class MainWindowViewModelTests
         dir.File("c.txt");
         using var harness = new Harness();
         var vm = harness.ViewModel;
-        await vm.CurrentTab!.InitializeAsync(dir.Path, dir.Path);
+        await GoAsync(vm, dir.Path, dir.Path);
         vm.SetActivePanel(vm.LeftPanel);
         Select(vm.LeftPanel, "b.txt");
         harness.Dialogs.DeleteAnswer = DeleteChoice.Permanent;
@@ -274,7 +593,7 @@ public class MainWindowViewModelTests
         using var dir = new TempDir();
         using var harness = new Harness();
         var vm = harness.ViewModel;
-        await vm.CurrentTab!.InitializeAsync(dir.Path, dir.Path);
+        await GoAsync(vm, dir.Path, dir.Path);
         vm.SetActivePanel(vm.LeftPanel);
         harness.Dialogs.InputAnswer = "Created";
         FileSystemEntry? revealed = null;
@@ -321,7 +640,7 @@ public class MainWindowViewModelTests
         var right = dir.Dir("right");
         using var harness = new Harness();
         var vm = harness.ViewModel;
-        await vm.CurrentTab!.InitializeAsync(left, right);
+        await GoAsync(vm, left, right);
         vm.ToggleFavoritesPanelCommand.Execute(null);
         vm.RememberWindowBounds(1280, 720, isMaximized: false);
 
@@ -379,7 +698,7 @@ public class MainWindowViewModelTests
         var folder = dir.Dir("Fav");
         using var harness = new Harness();
         var vm = harness.ViewModel;
-        await vm.CurrentTab!.InitializeAsync(dir.Path, dir.Path);
+        await GoAsync(vm, dir.Path, dir.Path);
         await harness.Settings.AddFavoriteAsync(folder);
         var favorite = harness.Settings.Settings.Favorites.Single();
 
@@ -407,7 +726,7 @@ public class MainWindowViewModelTests
         var file = dir.File("a.txt", "safe");
         using var harness = new Harness();
         var vm = harness.ViewModel;
-        await vm.CurrentTab!.InitializeAsync(dir.Path, dir.Path);
+        await GoAsync(vm, dir.Path, dir.Path);
         vm.SetActivePanel(vm.LeftPanel);
         Select(vm.LeftPanel, "a.txt");
 
@@ -434,7 +753,7 @@ public class MainWindowViewModelTests
         var target = dir.File(Path.Combine("sub", "target.txt"));
         using var harness = new Harness();
         var vm = harness.ViewModel;
-        await vm.CurrentTab!.InitializeAsync(dir.Path, dir.Path);
+        await GoAsync(vm, dir.Path, dir.Path);
         vm.SetActivePanel(vm.LeftPanel);
         harness.Dialogs.SearchAnswer = new FileSystemEntry { Name = "target.txt", FullPath = target, EntryType = FileSystemEntryType.File };
         FileSystemEntry? revealed = null;
@@ -463,7 +782,7 @@ public class MainWindowViewModelTests
         dir.File("old.txt");
         using var harness = new Harness();
         var vm = harness.ViewModel;
-        await vm.CurrentTab!.InitializeAsync(dir.Path, dir.Path);
+        await GoAsync(vm, dir.Path, dir.Path);
         vm.SetActivePanel(vm.LeftPanel);
 
         await vm.ShowMassRenameCommand.ExecuteAsync(null);
@@ -490,7 +809,7 @@ public class MainWindowViewModelTests
         var right = dir.Dir("right");
         using var harness = new Harness();
         var vm = harness.ViewModel;
-        await vm.CurrentTab!.InitializeAsync(left, right);
+        await GoAsync(vm, left, right);
         var first = vm.CurrentTab;
         await vm.NewTabCommand.ExecuteAsync(null);
         var second = vm.CurrentTab!;
@@ -500,19 +819,18 @@ public class MainWindowViewModelTests
         await vm.ToggleFavoriteCommand.ExecuteAsync(null);
 
         Assert.True(harness.Settings.IsFavorite(left));
-        Assert.True(second.LeftPanel.IsFavorite);
-        Assert.Contains(second.RightPanel.Favorites, favorite => favorite.Path == left);
-        Assert.Contains(first.LeftPanel.Favorites, favorite => favorite.Path == left);
-        Assert.True(first.LeftPanel.IsFavorite);
+        Assert.True(vm.LeftPanel.IsFavorite);
+        Assert.Contains(vm.RightPanel.Favorites, favorite => favorite.Path == left);
+        Assert.Contains(vm.LeftPanel.Favorites, favorite => favorite.Path == left);
 
         vm.SelectTabCommand.Execute(first);
         vm.SetActivePanel(vm.LeftPanel);
         await vm.ToggleFavoriteCommand.ExecuteAsync(null);
 
         Assert.False(harness.Settings.IsFavorite(left));
-        Assert.Empty(second.LeftPanel.Favorites);
-        Assert.False(second.LeftPanel.IsFavorite);
-        Assert.Empty(second.RightPanel.Favorites);
+        Assert.Empty(vm.LeftPanel.Favorites);
+        Assert.False(vm.LeftPanel.IsFavorite);
+        Assert.Empty(vm.RightPanel.Favorites);
     }
 
     // ---- H3: commands report failures instead of throwing --------------------------------------------------
@@ -523,6 +841,7 @@ public class MainWindowViewModelTests
         public Task CopyAsync(IEnumerable<FileSystemEntry> items) => throw new InvalidOperationException("clipboard boom");
         public Task CutAsync(IEnumerable<FileSystemEntry> items) => throw new InvalidOperationException("clipboard boom");
         public Task<IReadOnlyList<string>> GetPathsAsync() => throw new InvalidOperationException("clipboard boom");
+        public Task SetTextAsync(string text) => throw new InvalidOperationException("clipboard boom");
         public Task ClearAsync() => Task.CompletedTask;
     }
 
@@ -533,8 +852,8 @@ public class MainWindowViewModelTests
         dir.File("a.txt");
         var dialogs = new FakeDialogService();
         var trash = new FakeTrashService();
-        using var vm = new MainWindowViewModel(FileSystem, new FakeSettingsService(), dialogs, new ThrowingClipboard(), new FileOperationsService(FileSystem, dialogs, trash), trash, new ThemeService());
-        await vm.CurrentTab!.InitializeAsync(dir.Path, dir.Path);
+        using var vm = new MainWindowViewModel(FileSystem, new FakeSettingsService(), dialogs, new ThrowingClipboard(), new FileOperationsService(FileSystem, dialogs, trash), trash, new ThemeService(), new CompositeArchiveService(new ZipArchiveService(), new TarArchiveService()), new DirectoryComparer(), new UndoService(), new SftpConnections(), new FakeUpdateService());
+        await GoAsync(vm, dir.Path, dir.Path);
         vm.SetActivePanel(vm.LeftPanel);
         Select(vm.LeftPanel, "a.txt");
 
@@ -544,5 +863,635 @@ public class MainWindowViewModelTests
         Assert.Equal(["error:Copy", "error:Paste"], dialogs.Calls);
         Assert.Equal(["clipboard boom", "clipboard boom"], dialogs.ErrorMessages);
         Assert.Contains("Paste failed: clipboard boom", vm.StatusMessage);
+    }
+
+    // ---- tabs survive a session, folders can be measured -----------------------------------------------------
+
+    [AvaloniaFact]
+    public async Task Tabs_AreWrittenToTheSettings()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        var target = dir.Dir("left/target");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+        await vm.OpenInNewTabAsync(vm.LeftPanel, vm.LeftPanel.FilteredEntries.Single(e => e.Name == "target"));
+        vm.TogglePinCommand.Execute(vm.LeftTabs[0]);
+
+        vm.CaptureState();
+
+        var saved = harness.Settings.Settings.Tabs;
+        Assert.Equal(3, saved.Count);
+        Assert.Equal([left, target], saved.Where(t => t.Side == "Left").Select(t => t.Path));
+        Assert.Equal([right], saved.Where(t => t.Side == "Right").Select(t => t.Path));
+        Assert.True(saved.Single(t => t.Path == left).IsPinned);
+        Assert.True(saved.Single(t => t.Path == target).IsCurrent);
+    }
+
+    [AvaloniaFact]
+    public async Task Tabs_AreRestoredFromTheSettings()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var other = dir.Dir("other");
+        var right = dir.Dir("right");
+        using var harness = new Harness();
+        harness.Settings.Settings.LastLeftPanelPath = left;
+        harness.Settings.Settings.LastRightPanelPath = right;
+        harness.Settings.Settings.Tabs =
+        [
+            new TabState { Side = "Left", Path = left, IsPinned = true },
+            new TabState { Side = "Left", Path = other, IsCurrent = true },
+            new TabState { Side = "Right", Path = right, IsCurrent = true }
+        ];
+        var vm = harness.ViewModel;
+
+        await vm.InitializeAsync();
+        await WaitUntilAsync(() => vm.LeftPanel.CurrentPath == other);
+
+        Assert.Equal(2, vm.LeftTabs.Count);
+        Assert.Single(vm.RightTabs);
+        Assert.Equal([left, other], vm.LeftTabs.Select(tab => tab.Path));
+        Assert.True(vm.LeftTabs[0].IsPinned);
+        Assert.Equal(other, vm.LeftPanel.CurrentPath);
+        Assert.Equal(right, vm.RightPanel.CurrentPath);
+    }
+
+    [AvaloniaFact]
+    public async Task Tabs_RestoringSkipsFoldersThatAreGone()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        using var harness = new Harness();
+        harness.Settings.Settings.LastLeftPanelPath = left;
+        harness.Settings.Settings.LastRightPanelPath = left;
+        harness.Settings.Settings.Tabs =
+        [
+            new TabState { Side = "Left", Path = left, IsCurrent = true },
+            new TabState { Side = "Left", Path = Path.Combine(dir.Path, "deleted-since") }
+        ];
+        var vm = harness.ViewModel;
+
+        await vm.InitializeAsync();
+
+        Assert.Single(vm.LeftTabs);
+        Assert.Equal(left, vm.LeftTabs[0].Path);
+    }
+
+    [AvaloniaFact]
+    public async Task PinnedTab_KeepsItsFolderAndOpensAnotherTab()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var target = dir.Dir("left/target");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, left);
+        var pinned = vm.LeftTabs[0];
+        vm.TogglePinCommand.Execute(pinned);
+
+        await vm.LeftPanel.NavigateToCommand.ExecuteAsync(target);
+
+        Assert.Equal(left, pinned.Path);
+        Assert.Equal(2, vm.LeftTabs.Count);
+        Assert.Equal(target, vm.LeftTabs[1].Path);
+    }
+
+    [AvaloniaFact]
+    public async Task PinnedTab_CannotBeClosed()
+    {
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await vm.NewTabCommand.ExecuteAsync(null);
+        var pinned = vm.LeftTabs[1];
+        vm.TogglePinCommand.Execute(pinned);
+
+        await vm.CloseTabCommand.ExecuteAsync(pinned);
+
+        Assert.Contains(pinned, vm.LeftTabs);
+        Assert.Contains("pinned", vm.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [AvaloniaFact]
+    public async Task DuplicateTab_AddsASecondTabOnTheSameFolderAndPane()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, left);
+
+        await vm.DuplicateTabCommand.ExecuteAsync(vm.LeftTabs[0]);
+
+        Assert.Equal(2, vm.LeftTabs.Count);
+        Assert.Equal(left, vm.LeftTabs[1].Path);
+        Assert.Equal(PanelSide.Left, vm.LeftTabs[1].Side);
+        Assert.Same(vm.LeftTabs[1], vm.CurrentTab);
+    }
+
+    // ---- archives and folder comparison ----------------------------------------------------------------------
+
+    [AvaloniaFact]
+    public async Task Pack_WritesTheArchiveIntoTheOtherPanel()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        dir.File("left/a.txt", "content");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+        Select(vm.LeftPanel, "a.txt");
+        harness.Dialogs.InputAnswer = "bundle.zip";
+
+        await vm.PackCommand.ExecuteAsync(null);
+
+        Assert.True(File.Exists(Path.Combine(right, "bundle.zip")));
+        Assert.False(File.Exists(Path.Combine(left, "bundle.zip")));
+    }
+
+    [AvaloniaFact]
+    public async Task Extract_UnpacksIntoAFolderOfItsOwnInTheOtherPanel()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        dir.File("source/inner.txt", "inside");
+        await new ZipArchiveService().CreateAsync([Path.Combine(dir.Path, "source")], Path.Combine(left, "bundle.zip"));
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+        Select(vm.LeftPanel, "bundle.zip");
+
+        await vm.ExtractCommand.ExecuteAsync(null);
+
+        Assert.Equal("inside", await File.ReadAllTextAsync(Path.Combine(right, "bundle", "source", "inner.txt")));
+    }
+
+    [AvaloniaFact]
+    public async Task Extract_SaysSoWhenNothingSelectedIsAnArchive()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        dir.File("left/a.txt", "x");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+        Select(vm.LeftPanel, "a.txt");
+
+        await vm.ExtractCommand.ExecuteAsync(null);
+
+        Assert.Contains(".zip", vm.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [AvaloniaFact]
+    public async Task CompareDirectories_SelectsWhatDiffersOnEachSide()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        dir.File("left/only-left.txt", "x");
+        dir.File("right/only-right.txt", "x");
+        dir.File("left/both.txt", "same");
+        dir.File("right/both.txt", "same");
+        File.SetLastWriteTimeUtc(Path.Combine(right, "both.txt"), File.GetLastWriteTimeUtc(Path.Combine(left, "both.txt")));
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+
+        await vm.CompareDirectoriesCommand.ExecuteAsync(null);
+
+        Assert.Equal(["only-left.txt"], vm.LeftPanel.SelectedEntries.Select(entry => entry.Name));
+        Assert.Equal(["only-right.txt"], vm.RightPanel.SelectedEntries.Select(entry => entry.Name));
+    }
+
+    [AvaloniaFact]
+    public async Task CompareDirectories_RefusesTheSameFolderOnBothSides()
+    {
+        using var dir = new TempDir();
+        var same = dir.Dir("same");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, same, same);
+
+        await vm.CompareDirectoriesCommand.ExecuteAsync(null);
+
+        Assert.Contains("same folder", vm.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [AvaloniaFact]
+    public async Task Synchronize_CopiesTheMissingItemsAndLeavesTheExtrasAlone()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        dir.File("left/new.txt", "fresh");
+        dir.File("right/extra.txt", "keep me");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+        vm.SetActivePanel(vm.LeftPanel);
+        harness.Dialogs.ConfirmAnswer = true;
+
+        await vm.SynchronizeDirectoriesCommand.ExecuteAsync(null);
+
+        Assert.Equal("fresh", await File.ReadAllTextAsync(Path.Combine(right, "new.txt")));
+        Assert.Equal("keep me", await File.ReadAllTextAsync(Path.Combine(right, "extra.txt")));
+        Assert.False(File.Exists(Path.Combine(left, "extra.txt")));
+    }
+
+    [AvaloniaFact]
+    public async Task Synchronize_CopiesNothingWhenTheAnswerIsNo()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        dir.File("left/new.txt", "fresh");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+        vm.SetActivePanel(vm.LeftPanel);
+        harness.Dialogs.ConfirmAnswer = false;
+
+        await vm.SynchronizeDirectoriesCommand.ExecuteAsync(null);
+
+        Assert.False(File.Exists(Path.Combine(right, "new.txt")));
+    }
+
+    // ---- undo -------------------------------------------------------------------------------------------------
+
+    [AvaloniaFact]
+    public async Task Undo_MovesTheFilesBack()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        dir.File("left/a.txt", "content");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+        Select(vm.LeftPanel, "a.txt");
+
+        await vm.MoveCommand.ExecuteAsync(null);
+        Assert.True(File.Exists(Path.Combine(right, "a.txt")));
+
+        await vm.UndoCommand.ExecuteAsync(null);
+
+        Assert.True(File.Exists(Path.Combine(left, "a.txt")));
+        Assert.False(File.Exists(Path.Combine(right, "a.txt")));
+    }
+
+    [AvaloniaFact]
+    public async Task Undo_DeletesTheCopiesItMadeAfterConfirmation()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        dir.File("left/a.txt", "content");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+        Select(vm.LeftPanel, "a.txt");
+        await vm.CopyCommand.ExecuteAsync(null);
+        harness.Dialogs.ConfirmAnswer = true;
+
+        await vm.UndoCommand.ExecuteAsync(null);
+
+        Assert.False(File.Exists(Path.Combine(right, "a.txt")));
+        Assert.True(File.Exists(Path.Combine(left, "a.txt")));
+    }
+
+    [AvaloniaFact]
+    public async Task Undo_OfACopyKeepsTheFilesWhenTheAnswerIsNo()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        dir.File("left/a.txt", "content");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+        Select(vm.LeftPanel, "a.txt");
+        await vm.CopyCommand.ExecuteAsync(null);
+        harness.Dialogs.ConfirmAnswer = false;
+
+        await vm.UndoCommand.ExecuteAsync(null);
+
+        Assert.True(File.Exists(Path.Combine(right, "a.txt")));
+    }
+
+    [AvaloniaFact]
+    public async Task Undo_OfACopyNeverDeletesAFileThatWasAlreadyThere()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        dir.File("left/a.txt", "new");
+        dir.File("right/a.txt", "was already here");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+        Select(vm.LeftPanel, "a.txt");
+        harness.Dialogs.ConflictAnswer = new ConflictResolution(ConflictAction.Overwrite);
+        await vm.CopyCommand.ExecuteAsync(null);
+        harness.Dialogs.ConfirmAnswer = true;
+
+        await vm.UndoCommand.ExecuteAsync(null);
+
+        // The destination name existed before the copy, so it is not the copy's to remove.
+        Assert.True(File.Exists(Path.Combine(right, "a.txt")));
+    }
+
+    [AvaloniaFact]
+    public async Task Undo_RenamesBack()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        dir.File("left/before.txt", "x");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, left);
+        Select(vm.LeftPanel, "before.txt");
+        harness.Dialogs.InputAnswer = "after.txt";
+        await vm.RenameCommand.ExecuteAsync(null);
+        Assert.True(File.Exists(Path.Combine(left, "after.txt")));
+
+        await vm.UndoCommand.ExecuteAsync(null);
+
+        Assert.True(File.Exists(Path.Combine(left, "before.txt")));
+        Assert.False(File.Exists(Path.Combine(left, "after.txt")));
+    }
+
+    [AvaloniaFact]
+    public async Task Undo_RemovesAFolderItCreated()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, left);
+        harness.Dialogs.InputAnswer = "brand-new";
+        await vm.NewFolderCommand.ExecuteAsync(null);
+        Assert.True(Directory.Exists(Path.Combine(left, "brand-new")));
+
+        harness.Dialogs.ConfirmAnswer = true;
+        await vm.UndoCommand.ExecuteAsync(null);
+
+        Assert.False(Directory.Exists(Path.Combine(left, "brand-new")));
+    }
+
+    [AvaloniaFact]
+    public async Task Undo_SkipsAnItemWhoseOldNameIsTakenAgain()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        dir.File("left/a.txt", "moved away");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+        Select(vm.LeftPanel, "a.txt");
+        await vm.MoveCommand.ExecuteAsync(null);
+
+        // Something else took the old name in the meantime.
+        await File.WriteAllTextAsync(Path.Combine(left, "a.txt"), "a different file");
+
+        await vm.UndoCommand.ExecuteAsync(null);
+
+        Assert.Equal("a different file", await File.ReadAllTextAsync(Path.Combine(left, "a.txt")));
+        Assert.True(File.Exists(Path.Combine(right, "a.txt")));
+        Assert.Contains("had changed since", vm.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [AvaloniaFact]
+    public async Task Undo_SaysSoWhenThereIsNothingToUndo()
+    {
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+
+        await vm.UndoCommand.ExecuteAsync(null);
+
+        Assert.Contains("nothing to undo", vm.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [AvaloniaFact]
+    public async Task Undo_DeletionIsNeverRecorded()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        dir.File("left/a.txt", "x");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, left);
+        Select(vm.LeftPanel, "a.txt");
+        harness.Dialogs.DeleteAnswer = DeleteChoice.Trash;
+
+        await vm.DeleteCommand.ExecuteAsync(null);
+        await vm.UndoCommand.ExecuteAsync(null);
+
+        // The trash has no restore API, so a deletion must not pretend to be undoable.
+        Assert.Contains("nothing to undo", vm.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [AvaloniaFact]
+    public async Task NewTab_WithASideNamedIgnoresWhichPaneHasTheFocus()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+
+        // The left pane has the focus, but the right-hand "+" must still open a right-hand tab.
+        vm.SetActivePanel(vm.LeftPanel);
+        await vm.NewTabCommand.ExecuteAsync("Right");
+
+        Assert.Equal(2, vm.RightTabs.Count);
+        Assert.Single(vm.LeftTabs);
+        Assert.Equal(PanelSide.Right, vm.CurrentTab!.Side);
+
+        vm.SetActivePanel(vm.RightPanel);
+        await vm.NewTabCommand.ExecuteAsync("Left");
+
+        Assert.Equal(2, vm.LeftTabs.Count);
+        Assert.Equal(PanelSide.Left, vm.CurrentTab!.Side);
+    }
+
+    [AvaloniaFact]
+    public async Task NewTab_WithNoSideStillFollowsTheFocus()
+    {
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        vm.SetActivePanel(vm.RightPanel);
+
+        // This is the keyboard shortcut's path, which passes nothing.
+        await vm.NewTabCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, vm.RightTabs.Count);
+        Assert.Single(vm.LeftTabs);
+    }
+
+    [AvaloniaFact]
+    public async Task Startup_AnnouncesTheLanguageEvenWhenTheSettingDidNotChange()
+    {
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+
+        // "System" is both the default and what the settings hold, so the property value does not change. The
+        // texts still do, and the views have to re-measure or they keep the widths of the English words.
+        harness.Settings.Settings.Language = "System";
+
+        var announced = 0;
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainWindowViewModel.CurrentLanguage))
+            {
+                announced++;
+            }
+        };
+
+        await vm.InitializeAsync();
+
+        Assert.True(announced > 0, "Starting up must announce the language, or the layout keeps the old widths.");
+    }
+
+    // ---- update checks ----------------------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(0, false)]
+    [InlineData(3, false)]
+    [InlineData(6, false)]
+    [InlineData(7, true)]
+    [InlineData(30, true)]
+    public void DueForCheck_RunsAtMostOnceAWeek(int? daysAgo, bool expected)
+    {
+        var last = daysAgo is { } days ? DateTime.UtcNow.AddDays(-days) : (DateTime?)null;
+
+        Assert.Equal(expected, MainWindowViewModel.DueForCheck(last));
+    }
+
+    [AvaloniaFact]
+    public async Task Startup_ChecksForUpdatesWhenTheSettingIsOnAndTheWeekIsUp()
+    {
+        using var harness = new Harness();
+        harness.Settings.Settings.CheckForUpdates = true;
+        harness.Settings.Settings.LastUpdateCheck = DateTime.UtcNow.AddDays(-8);
+
+        await harness.ViewModel.InitializeAsync();
+        await WaitUntilAsync(() => harness.Updates.Checks > 0, 2000);
+
+        Assert.Equal(1, harness.Updates.Checks);
+    }
+
+    [AvaloniaFact]
+    public async Task Startup_DoesNotCheckWhenTheSettingIsOff()
+    {
+        using var harness = new Harness();
+        harness.Settings.Settings.CheckForUpdates = false;
+        harness.Settings.Settings.LastUpdateCheck = null;
+
+        await harness.ViewModel.InitializeAsync();
+        await Task.Delay(200);
+
+        Assert.Equal(0, harness.Updates.Checks);
+    }
+
+    [AvaloniaFact]
+    public async Task Startup_DoesNotCheckAgainWithinTheWeek()
+    {
+        using var harness = new Harness();
+        harness.Settings.Settings.CheckForUpdates = true;
+        harness.Settings.Settings.LastUpdateCheck = DateTime.UtcNow.AddDays(-2);
+
+        await harness.ViewModel.InitializeAsync();
+        await Task.Delay(200);
+
+        Assert.Equal(0, harness.Updates.Checks);
+    }
+
+    [AvaloniaFact]
+    public async Task CheckingByHandOffersToOpenTheDownloadPage()
+    {
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        harness.Updates.Answer = new UpdateInfo
+        {
+            Version = new Version(99, 0, 0),
+            Tag = "v99.0.0",
+            Url = "https://example.invalid/releases/v99.0.0",
+            IsNewer = true
+        };
+        harness.Dialogs.ConfirmAnswer = false;
+
+        await vm.CheckForUpdatesNowCommand.ExecuteAsync(null);
+
+        Assert.Contains("v99.0.0", vm.StatusMessage, StringComparison.Ordinal);
+        Assert.Contains(harness.Dialogs.Calls, call => call.StartsWith("confirm", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [AvaloniaFact]
+    public async Task CheckingByHandSaysSoWhenAlreadyCurrent()
+    {
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        harness.Updates.Answer = new UpdateInfo
+        {
+            Version = new Version(1, 0, 0),
+            Tag = "v1.0.0",
+            Url = "https://example.invalid",
+            IsNewer = false
+        };
+
+        await vm.CheckForUpdatesNowCommand.ExecuteAsync(null);
+
+        // Asked for by hand, so the answer has to be on screen, not only in the status bar.
+        Assert.Single(harness.Dialogs.Messages);
+        Assert.Contains(Strings.Get("Update_CurrentLong").Split('{')[0], harness.Dialogs.Messages[0], StringComparison.Ordinal);
+    }
+
+    [AvaloniaFact]
+    public async Task CheckingByHandSaysSoWhenTheServerIsUnreachable()
+    {
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        harness.Updates.Answer = null;
+
+        await vm.CheckForUpdatesNowCommand.ExecuteAsync(null);
+
+        Assert.Single(harness.Dialogs.Messages);
+    }
+
+    [AvaloniaFact]
+    public void TogglingTheCheckWritesItToTheSettings()
+    {
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        Assert.True(vm.CheckForUpdates);
+
+        vm.ToggleUpdateChecksCommand.Execute(null);
+
+        Assert.False(vm.CheckForUpdates);
+        Assert.False(harness.Settings.Settings.CheckForUpdates);
+    }
+
+    [AvaloniaFact]
+    public async Task TheAutomaticCheckStaysQuietWhenThereIsNothingToSay()
+    {
+        using var harness = new Harness();
+        harness.Settings.Settings.CheckForUpdates = true;
+        harness.Settings.Settings.LastUpdateCheck = DateTime.UtcNow.AddDays(-8);
+        harness.Updates.Answer = null;
+
+        await harness.ViewModel.InitializeAsync();
+        await WaitUntilAsync(() => harness.Updates.Checks > 0, 2000);
+        await Task.Delay(100);
+
+        // Nobody asked, so a failed check must not interrupt with a dialog.
+        Assert.Empty(harness.Dialogs.Messages);
     }
 }

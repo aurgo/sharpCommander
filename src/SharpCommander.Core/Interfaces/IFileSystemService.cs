@@ -107,4 +107,20 @@ public interface IFileSystemService
     /// symbolic links. Reports the running total through <paramref name="progress"/>.
     /// </summary>
     Task<long> GetDirectorySizeAsync(string path, IProgress<long>? progress = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Applies <paramref name="change"/> to <paramref name="paths"/>. Entries that cannot be changed are counted
+    /// rather than aborting the batch, so one protected file does not stop the rest.
+    /// </summary>
+    /// <returns>How many entries were changed.</returns>
+    Task<int> ApplyAttributesAsync(IReadOnlyList<string> paths, AttributeChange change, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Compares two files byte for byte. Returns the offset of the first byte that differs, -1 when the files are
+    /// identical, or the length of the shorter file when one is a prefix of the other.
+    /// </summary>
+    Task<long> FindFirstDifferenceAsync(string leftPath, string rightPath, CancellationToken cancellationToken = default);
+
+    /// <summary>Opens the platform terminal with <paramref name="directory"/> as its working folder.</summary>
+    Task OpenTerminalAsync(string directory, CancellationToken cancellationToken = default);
 }

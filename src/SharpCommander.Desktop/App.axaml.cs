@@ -37,13 +37,20 @@ public sealed class App : Application
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            var fileSystemService = new FileSystemService();
+            // Every path in the application goes through the router: local ones reach the disk, "sftp://" ones
+            // reach an open session, and nothing above this line has to know the difference.
+            var connections = new SftpConnections();
+            var fileSystemService = new RoutingFileSystemService(new FileSystemService(), connections);
             var settingsService = new SettingsService();
-            var dialogService = new DialogService(fileSystemService);
+            var dialogService = new DialogService(fileSystemService, settingsService);
             var trashService = new TrashService();
             var clipboardService = new ClipboardService();
             var operationsService = new FileOperationsService(fileSystemService, dialogService, trashService);
             var themeService = new ThemeService();
+            var archiveService = new CompositeArchiveService(new ZipArchiveService(), new TarArchiveService());
+            var directoryComparer = new DirectoryComparer();
+            var undoService = new UndoService();
+            var updateService = new GitHubUpdateService();
 
             var mainViewModel = new MainWindowViewModel(
                 fileSystemService,
@@ -52,7 +59,12 @@ public sealed class App : Application
                 clipboardService,
                 operationsService,
                 trashService,
-                themeService);
+                themeService,
+                archiveService,
+                directoryComparer,
+                undoService,
+                connections,
+                updateService);
 
             RegisterDispatcherExceptionHandler(dialogService);
 

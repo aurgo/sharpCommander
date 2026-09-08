@@ -20,18 +20,22 @@ public sealed class DialogService : IDialogService
     private readonly IFileSystemService _fileSystemService;
     private readonly Func<Window?> _ownerProvider;
 
-    public DialogService(IFileSystemService fileSystemService)
-        : this(fileSystemService, FindActiveWindow)
+    /// <summary>Where the saved SFTP servers live; null in the dialog tests, which never open that window.</summary>
+    private readonly ISettingsService? _settingsService;
+
+    public DialogService(IFileSystemService fileSystemService, ISettingsService settingsService)
+        : this(fileSystemService, FindActiveWindow, settingsService)
     {
     }
 
     /// <summary>Creates a service whose dialogs are owned by the window returned by <paramref name="ownerProvider"/>.</summary>
-    internal DialogService(IFileSystemService fileSystemService, Func<Window?> ownerProvider)
+    internal DialogService(IFileSystemService fileSystemService, Func<Window?> ownerProvider, ISettingsService? settingsService = null)
     {
         ArgumentNullException.ThrowIfNull(fileSystemService);
         ArgumentNullException.ThrowIfNull(ownerProvider);
         _fileSystemService = fileSystemService;
         _ownerProvider = ownerProvider;
+        _settingsService = settingsService;
     }
 
     public Task ShowHashDialogAsync(string filePath) => OnUiThreadAsync(async () =>
@@ -119,6 +123,42 @@ public sealed class DialogService : IDialogService
         var dialog = new InputDialog(title, prompt, initialValue, validate);
         var accepted = await dialog.ShowDialog<bool>(owner);
         return accepted ? dialog.Result : null;
+    });
+
+    public Task<AttributeChange?> ShowAttributesDialogAsync(string prompt, UnixFileMode? currentMode) => OnUiThreadAsync<AttributeChange?>(async () =>
+    {
+        if (_ownerProvider() is not { } owner)
+        {
+            return null;
+        }
+
+        var dialog = new AttributesDialog(prompt, currentMode);
+        var accepted = await dialog.ShowDialog<bool>(owner);
+        return accepted ? dialog.Result : null;
+    });
+
+    public Task<(SftpSite? Site, string? Password)> ShowSftpConnectAsync() => OnUiThreadAsync<(SftpSite?, string?)>(async () =>
+    {
+        if (_ownerProvider() is not { } owner || _settingsService is not { } settings)
+        {
+            return (null, null);
+        }
+
+        var dialog = new SftpConnectDialog(settings, new KeychainSecretStore(), this);
+        var accepted = await dialog.ShowDialog<bool>(owner);
+        return accepted ? (dialog.Result, dialog.Password) : (null, null);
+    });
+
+    public Task ShowMessageAsync(string title, string message) => OnUiThreadAsync(async () =>
+    {
+        if (_ownerProvider() is not { } owner)
+        {
+            return;
+        }
+
+        // The confirm dialog with no cancel text: one button, and the answer is simply "I have read it".
+        var dialog = new ConfirmDialog(title, message, Localization.Strings.Get("ConfirmDialog_Ok"), string.Empty, destructive: false);
+        await dialog.ShowDialog<bool>(owner);
     });
 
     public Task<bool> ShowConfirmAsync(string title, string message, string confirmText = "OK", string cancelText = "Cancel", bool destructive = false, bool defaultIsCancel = false) => OnUiThreadAsync(async () =>

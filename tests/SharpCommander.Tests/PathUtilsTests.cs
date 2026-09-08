@@ -144,4 +144,37 @@ public class NaturalStringComparerTests
         Assert.True(Comparer.Compare(null, "a") < 0);
         Assert.True(Comparer.Compare("a", null) > 0);
     }
+
+    // ---- wildcard masks -------------------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("*.cs", "Program.cs", true)]
+    [InlineData("*.cs", "Program.csproj", false)]
+    [InlineData("?.txt", "a.txt", true)]
+    [InlineData("?.txt", "ab.txt", false)]
+    [InlineData("*", "anything", true)]
+    [InlineData("report_*.txt", "report_2026.txt", true)]
+    [InlineData("report_*.txt", "summary_2026.txt", false)]
+    [InlineData("*.cs;*.md", "notes.md", true)]
+    [InlineData("*.cs *.md", "Program.cs", true)]
+    [InlineData("*.cs;*.md", "image.png", false)]
+    public void WildcardToRegex_MatchesWholeNames(string mask, string name, bool expected)
+    {
+        Assert.Equal(expected, PathUtils.WildcardToRegex(mask).IsMatch(name));
+    }
+
+    [Fact]
+    public void WildcardToRegex_TreatsDotsAndBracketsAsLiterals()
+    {
+        var regex = PathUtils.WildcardToRegex("a.b[1].txt");
+
+        Assert.Matches(regex, "a.b[1].txt");
+        Assert.DoesNotMatch(regex, "axbx1x.txt");
+    }
+
+    [Fact]
+    public void WildcardToRegex_RejectsAnEmptyMask()
+    {
+        Assert.Throws<ArgumentException>(() => PathUtils.WildcardToRegex("   "));
+    }
 }

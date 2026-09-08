@@ -1,10 +1,11 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SharpCommander.Desktop.Localization"
         xmlns:vm="using:SharpCommander.Desktop.ViewModels"
         xmlns:util="using:SharpCommander.Desktop.Utilities"
         x:Class="SharpCommander.Desktop.Views.PropertiesWindow"
         x:DataType="vm:PropertiesViewModel"
-        Title="Properties"
+        Title="{loc:T PropertiesWindow_Properties}"
         Width="480"
         SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
@@ -30,7 +31,7 @@
     <Border Padding="20">
         <DockPanel>
             <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-                <Button Classes="dialog-button" Content="Close" Click="Close_Click" IsDefault="True" IsCancel="True" />
+                <Button Classes="dialog-button" Content="{loc:T PropertiesWindow_Close}" Click="Close_Click" IsDefault="True" IsCancel="True" />
             </StackPanel>
 
             <StackPanel Spacing="12">
@@ -45,34 +46,34 @@
                 <Separator />
 
                 <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Location" />
+                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="{loc:T PropertiesWindow_Location}" />
                     <SelectableTextBlock Grid.Row="0" Grid.Column="1" Classes="value" Text="{Binding Location}" />
 
-                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Size" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="{loc:T PropertiesWindow_Size}" />
                     <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="8">
                         <SelectableTextBlock Classes="value" Text="{Binding SizeText}" />
                         <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsCalculating}" Width="60" Height="4" VerticalAlignment="Center" />
                     </StackPanel>
 
-                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="Contains" IsVisible="{Binding IsDirectory}" />
+                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="{loc:T PropertiesWindow_Contains}" IsVisible="{Binding IsDirectory}" />
                     <TextBlock Grid.Row="2" Grid.Column="1" Classes="value" Text="{Binding ContentsText}" IsVisible="{Binding IsDirectory}" />
 
-                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="Space" IsVisible="{Binding HasDriveInfo}" />
+                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="{loc:T PropertiesWindow_Space}" IsVisible="{Binding HasDriveInfo}" />
                     <TextBlock Grid.Row="3" Grid.Column="1" Classes="value" Text="{Binding DriveInfoText}" IsVisible="{Binding HasDriveInfo}" />
 
-                    <TextBlock Grid.Row="4" Grid.Column="0" Classes="label" Text="Created" />
+                    <TextBlock Grid.Row="4" Grid.Column="0" Classes="label" Text="{loc:T PropertiesWindow_Created}" />
                     <TextBlock Grid.Row="4" Grid.Column="1" Classes="value" Text="{Binding CreatedText}" />
 
-                    <TextBlock Grid.Row="5" Grid.Column="0" Classes="label" Text="Modified" />
+                    <TextBlock Grid.Row="5" Grid.Column="0" Classes="label" Text="{loc:T PropertiesWindow_Modified}" />
                     <TextBlock Grid.Row="5" Grid.Column="1" Classes="value" Text="{Binding ModifiedText}" />
 
-                    <TextBlock Grid.Row="6" Grid.Column="0" Classes="label" Text="Accessed" />
+                    <TextBlock Grid.Row="6" Grid.Column="0" Classes="label" Text="{loc:T PropertiesWindow_Accessed}" />
                     <TextBlock Grid.Row="6" Grid.Column="1" Classes="value" Text="{Binding AccessedText}" />
 
-                    <TextBlock Grid.Row="7" Grid.Column="0" Classes="label" Text="Attributes" />
+                    <TextBlock Grid.Row="7" Grid.Column="0" Classes="label" Text="{loc:T PropertiesWindow_Attributes}" />
                     <TextBlock Grid.Row="7" Grid.Column="1" Classes="value" Text="{Binding AttributesText}" />
 
-                    <TextBlock Grid.Row="8" Grid.Column="0" Classes="label" Text="Permissions" IsVisible="{Binding HasUnixPermissions}" />
+                    <TextBlock Grid.Row="8" Grid.Column="0" Classes="label" Text="{loc:T PropertiesWindow_Permissions}" IsVisible="{Binding HasUnixPermissions}" />
                     <TextBlock Grid.Row="8" Grid.Column="1" Classes="value monospace" Text="{Binding UnixPermissionsText}" IsVisible="{Binding HasUnixPermissions}" />
                 </Grid>
             </StackPanel>

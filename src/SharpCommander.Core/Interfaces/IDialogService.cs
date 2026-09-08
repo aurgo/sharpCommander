@@ -46,6 +46,21 @@ public interface IDialogService
     /// </summary>
     Task<ConflictResolution> ShowConflictAsync(FileConflict conflict, int remainingConflicts);
 
+    /// <summary>
+    /// Asks which attributes (and, off Windows, which permissions) to apply to a selection. Returns null when
+    /// cancelled. <paramref name="currentMode"/> seeds the permission boxes from the first selected entry.
+    /// </summary>
+    Task<AttributeChange?> ShowAttributesDialogAsync(string prompt, UnixFileMode? currentMode);
+
+    /// <summary>
+    /// Picks a server to connect to and lets the saved list be edited in the same window. Returns the server and,
+    /// when one was typed, its password; both null when cancelled.
+    /// </summary>
+    Task<(SftpSite? Site, string? Password)> ShowSftpConnectAsync();
+
+    /// <summary>Tells the user something and waits for them to acknowledge it. One button, nothing to decide.</summary>
+    Task ShowMessageAsync(string title, string message);
+
     /// <summary>Shows an error with an optional expandable details section.</summary>
     Task ShowErrorAsync(string title, string message, string? details = null);
 

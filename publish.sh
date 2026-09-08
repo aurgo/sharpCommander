@@ -2,7 +2,7 @@
 
 # SharpCommander - publish script for Linux and macOS.
 #
-# A thin wrapper over 'dotnet publish'. The publish configuration (self-contained, partial trimming, no debug
+# A thin wrapper over 'dotnet publish'. The publish configuration (self-contained, single-file, partial trimming, no debug
 # symbols) lives in src/SharpCommander.Desktop/SharpCommander.Desktop.csproj so every platform and every script
 # ships the same binaries, and the version is read from Directory.Build.props. macOS platforms are wrapped in a
 # SharpCommander.app bundle (ad-hoc signed when codesign is available) and the bundle is what gets zipped.
@@ -20,6 +20,7 @@ OUTPUT_BASE="publish"
 APP_NAME="SharpCommander"
 EXECUTABLE="SharpCommander.Desktop"
 ALL_PLATFORMS=(win-x64 win-x86 win-arm64 linux-x64 linux-arm64 osx-x64 osx-arm64)
+INSTALLER="packaging/macos-install.sh"
 
 # Colors
 RED='\033[0;31m'
@@ -55,7 +56,7 @@ print_usage() {
     echo "  -h, --help   Show this help"
     echo ""
     echo "The publish settings come from $PROJECT_PATH and the version from $PROPS_FILE."
-    echo "macOS platforms produce $OUTPUT_BASE/<rid>/$APP_NAME.app; the other platforms produce loose files."
+    echo "macOS platforms produce $OUTPUT_BASE/<rid>/$APP_NAME.app plus install.sh; the others produce loose files."
     echo ""
     echo "Examples:"
     echo "  $0 linux-x64"
@@ -123,10 +124,12 @@ create_zip() {
 
     case "$rid" in
         osx-*)
+            # The archive holds the bundle and install.sh side by side, so the whole folder is packed rather
+            # than just the bundle. ditto keeps the bundle's structure and its ad-hoc signature intact.
             if command -v ditto >/dev/null 2>&1; then
-                ditto -c -k --norsrc --keepParent "$output_dir/$APP_NAME.app" "$zip_path"
+                ditto -c -k --norsrc "$output_dir" "$zip_path"
             else
-                (cd "$output_dir" && zip -r -y -q "$zip_path" "$APP_NAME.app")
+                (cd "$output_dir" && zip -r -y -q "$zip_path" .)
             fi
             ;;
         *)
@@ -174,6 +177,15 @@ publish_platform() {
             if ! finish_app_bundle "$output_dir/$APP_NAME.app"; then
                 echo -e "  ${RED}ERROR: The .app bundle could not be completed for $rid${NC}"
                 return 1
+            fi
+
+            # Without notarization macOS quarantines the download and kills it, for a bundle with a dialog and
+            # for a bare binary with nothing at all. This script is the way out that does not need an account.
+            if [ -f "$INSTALLER" ]; then
+                cp "$INSTALLER" "$output_dir/install.sh"
+                chmod +x "$output_dir/install.sh"
+            else
+                echo -e "  ${YELLOW}WARNING: $INSTALLER is missing; the archive will have no installer${NC}"
             fi
             ;;
     esac

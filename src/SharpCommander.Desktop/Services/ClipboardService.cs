@@ -33,6 +33,12 @@ public interface IClipboardService
     /// <summary>True when the paths returned by the last <see cref="GetPathsAsync"/> are to be moved rather than copied.</summary>
     bool IsCutMode { get; }
 
+    /// <summary>
+    /// Puts plain text on the clipboard, replacing any file list this service had placed there. Used for the
+    /// paths, which other applications expect as text rather than as storage items.
+    /// </summary>
+    Task SetTextAsync(string text);
+
     /// <summary>Forgets the internal list and clears the system clipboard when it still holds this service's content.</summary>
     Task ClearAsync();
 }
@@ -75,7 +81,37 @@ public sealed class ClipboardService : IClipboardService
 
     public Task<IReadOnlyList<string>> GetPathsAsync() => OnUiThreadAsync(GetPathsCoreAsync);
 
+    public Task SetTextAsync(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        return OnUiThreadAsync(() => SetTextCoreAsync(text));
+    }
+
     public Task ClearAsync() => OnUiThreadAsync(ClearCoreAsync);
+
+    /// <summary>
+    /// Writes text and drops the file list: a path copied as text is no longer a pending copy or move, and
+    /// leaving the old entries behind would make the next paste act on files the user did not choose.
+    /// </summary>
+    private async Task SetTextCoreAsync(string text)
+    {
+        Forget();
+        _text = text;
+
+        if (_topLevelProvider()?.Clipboard is not { } clipboard)
+        {
+            return;
+        }
+
+        try
+        {
+            await clipboard.SetTextAsync(text);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warning("The text could not be placed on the system clipboard.", ex);
+        }
+    }
 
     private Task SetAsync(IEnumerable<FileSystemEntry> items, bool cut)
     {

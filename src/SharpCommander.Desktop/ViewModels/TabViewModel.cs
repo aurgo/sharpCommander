@@ -1,71 +1,44 @@
-using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
-using SharpCommander.Core.Interfaces;
-using SharpCommander.Desktop.Services;
 
 namespace SharpCommander.Desktop.ViewModels;
 
 /// <summary>
-/// One tab: a left and a right panel and which of them is active. The title follows the active panel's folder.
-/// Panels are created here and only here, and are disposed with the tab.
+/// One tab: a folder remembered for one of the two panes. A tab belongs to a fixed <see cref="Side"/> — the pane
+/// it was opened from — which decides where it sits in the tab bar and which panel it drives. The panels
+/// themselves live in <see cref="MainWindowViewModel"/> and are shared by every tab, so activating a tab moves
+/// only its own side and leaves the opposite pane exactly where it was.
 /// </summary>
-public sealed partial class TabViewModel : ObservableObject, IDisposable
+public sealed partial class TabViewModel : ObservableObject
 {
     private const string ComputerTitle = "Computer";
 
-    private readonly IFileSystemService _fileSystemService;
-    private bool _disposed;
+    /// <summary>The folder this tab shows on its side; empty means the volume list.</summary>
+    [ObservableProperty]
+    private string _path;
 
     [ObservableProperty]
-    private string _title = ComputerTitle;
+    private string _title;
 
+    /// <summary>Whether this is the tab currently on screen; the tab bar highlights it.</summary>
     [ObservableProperty]
-    private FilePanelViewModel _activePanel;
+    private bool _isCurrent;
 
-    public FilePanelViewModel LeftPanel { get; }
+    /// <summary>
+    /// A pinned tab keeps its folder: navigating the pane opens a new tab instead of moving this one, and it
+    /// cannot be closed. Use it to keep a folder one click away.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isPinned;
 
-    public FilePanelViewModel RightPanel { get; }
-
-    public TabViewModel(IFileSystemService fileSystemService, ISettingsService settingsService, IDialogService dialogService, IClipboardService clipboardService, IFileOperationsService fileOperationsService)
+    public TabViewModel(PanelSide side, string? path = null)
     {
-        ArgumentNullException.ThrowIfNull(fileSystemService);
-        _fileSystemService = fileSystemService;
-
-        LeftPanel = new FilePanelViewModel(fileSystemService, settingsService, dialogService, clipboardService, fileOperationsService);
-        RightPanel = new FilePanelViewModel(fileSystemService, settingsService, dialogService, clipboardService, fileOperationsService);
-        _activePanel = LeftPanel;
-
-        LeftPanel.PropertyChanged += OnPanelPropertyChanged;
-        RightPanel.PropertyChanged += OnPanelPropertyChanged;
-        UpdateTitle();
+        Side = side;
+        _path = path ?? string.Empty;
+        _title = TitleFor(_path);
     }
 
-    /// <summary>Navigates both panels to their starting folders (the default directory when null).</summary>
-    public async Task InitializeAsync(string? leftPath = null, string? rightPath = null)
-    {
-        var defaultPath = _fileSystemService.GetDefaultDirectory();
-
-        await Task.WhenAll(
-            LeftPanel.InitializeAsync(leftPath ?? defaultPath),
-            RightPanel.InitializeAsync(rightPath ?? defaultPath));
-
-        UpdateTitle();
-    }
-
-    /// <summary>Makes one of this tab's panels the active one; other panels are ignored.</summary>
-    public void SetActivePanel(FilePanelViewModel panel)
-    {
-        if (ReferenceEquals(panel, LeftPanel) || ReferenceEquals(panel, RightPanel))
-        {
-            ActivePanel = panel;
-        }
-    }
-
-    /// <summary>Gets the panel opposite to <paramref name="panel"/> (the left one for anything else).</summary>
-    public FilePanelViewModel OtherPanel(FilePanelViewModel panel)
-    {
-        return ReferenceEquals(panel, LeftPanel) ? RightPanel : LeftPanel;
-    }
+    /// <summary>The pane this tab was opened from. Fixed for the life of the tab.</summary>
+    public PanelSide Side { get; }
 
     /// <summary>The tab title for a folder path: its last segment, or the path itself for a root.</summary>
     internal static string TitleFor(string? path)
@@ -75,40 +48,14 @@ public sealed partial class TabViewModel : ObservableObject, IDisposable
             return ComputerTitle;
         }
 
-        var trimmed = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var name = Path.GetFileName(trimmed);
+        // Fully qualified: this class has its own Path property.
+        var trimmed = path.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
+        var name = System.IO.Path.GetFileName(trimmed);
         return string.IsNullOrEmpty(name) ? path : name;
     }
 
-    partial void OnActivePanelChanged(FilePanelViewModel value)
+    partial void OnPathChanged(string value)
     {
-        UpdateTitle();
-    }
-
-    private void OnPanelPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (ReferenceEquals(sender, ActivePanel) && e.PropertyName is nameof(FilePanelViewModel.CurrentPath) or nameof(FilePanelViewModel.IsRootView))
-        {
-            UpdateTitle();
-        }
-    }
-
-    private void UpdateTitle()
-    {
-        Title = ActivePanel.IsRootView ? ComputerTitle : TitleFor(ActivePanel.CurrentPath);
-    }
-
-    public void Dispose()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _disposed = true;
-        LeftPanel.PropertyChanged -= OnPanelPropertyChanged;
-        RightPanel.PropertyChanged -= OnPanelPropertyChanged;
-        LeftPanel.Dispose();
-        RightPanel.Dispose();
+        Title = TitleFor(value);
     }
 }

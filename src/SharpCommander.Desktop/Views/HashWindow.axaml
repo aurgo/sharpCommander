@@ -1,9 +1,10 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SharpCommander.Desktop.Localization"
         xmlns:vm="using:SharpCommander.Desktop.ViewModels"
         x:Class="SharpCommander.Desktop.Views.HashWindow"
         x:DataType="vm:HashViewModel"
-        Title="File Checksums"
+        Title="{loc:T HashWindow_FileChecksums}"
         Width="640"
         SizeToContent="Height"
         MinHeight="200"
@@ -32,9 +33,9 @@
     <Border Padding="24">
         <DockPanel>
             <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
-                <Button Classes="dialog-button" Content="Copy all" Click="Copy_Click" Tag="{Binding AllHashes}" IsEnabled="{Binding HasResults}" />
-                <Button Classes="dialog-button" Content="Cancel" Command="{Binding CancelCommand}" IsVisible="{Binding IsCalculating}" />
-                <Button Classes="dialog-button" Content="Close" Click="Close_Click" IsDefault="True" IsCancel="True" />
+                <Button Classes="dialog-button" Content="{loc:T HashWindow_CopyAll}" Click="Copy_Click" Tag="{Binding AllHashes}" IsEnabled="{Binding HasResults}" />
+                <Button Classes="dialog-button" Content="{loc:T HashWindow_Cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding IsCalculating}" />
+                <Button Classes="dialog-button" Content="{loc:T HashWindow_Close}" Click="Close_Click" IsDefault="True" IsCancel="True" />
             </StackPanel>
 
             <StackPanel Spacing="6">
@@ -50,24 +51,24 @@
 
                 <StackPanel IsVisible="{Binding HasResults}" Spacing="6" Margin="0,10,0,0">
                     <Grid ColumnDefinitions="80,*,Auto">
-                        <TextBlock Grid.Column="0" Classes="hash-label" Text="MD5" />
+                        <TextBlock Grid.Column="0" Classes="hash-label" Text="{loc:T HashWindow_Md5}" />
                         <TextBox Grid.Column="1" Classes="monospace hash" Text="{Binding Md5}" />
-                        <Button Grid.Column="2" Classes="copy" Content="Copy" Click="Copy_Click" Tag="{Binding Md5}" ToolTip.Tip="Copy MD5" />
+                        <Button Grid.Column="2" Classes="copy" Content="{loc:T HashWindow_Copy}" Click="Copy_Click" Tag="{Binding Md5}" ToolTip.Tip="{loc:T HashWindow_CopyMd5}" />
                     </Grid>
                     <Grid ColumnDefinitions="80,*,Auto">
-                        <TextBlock Grid.Column="0" Classes="hash-label" Text="SHA-1" />
+                        <TextBlock Grid.Column="0" Classes="hash-label" Text="{loc:T HashWindow_Sha1}" />
                         <TextBox Grid.Column="1" Classes="monospace hash" Text="{Binding Sha1}" />
-                        <Button Grid.Column="2" Classes="copy" Content="Copy" Click="Copy_Click" Tag="{Binding Sha1}" ToolTip.Tip="Copy SHA-1" />
+                        <Button Grid.Column="2" Classes="copy" Content="{loc:T HashWindow_Copy}" Click="Copy_Click" Tag="{Binding Sha1}" ToolTip.Tip="{loc:T HashWindow_CopySha1}" />
                     </Grid>
                     <Grid ColumnDefinitions="80,*,Auto">
-                        <TextBlock Grid.Column="0" Classes="hash-label" Text="SHA-256" />
+                        <TextBlock Grid.Column="0" Classes="hash-label" Text="{loc:T HashWindow_Sha256}" />
                         <TextBox Grid.Column="1" Classes="monospace hash" Text="{Binding Sha256}" />
-                        <Button Grid.Column="2" Classes="copy" Content="Copy" Click="Copy_Click" Tag="{Binding Sha256}" ToolTip.Tip="Copy SHA-256" />
+                        <Button Grid.Column="2" Classes="copy" Content="{loc:T HashWindow_Copy}" Click="Copy_Click" Tag="{Binding Sha256}" ToolTip.Tip="{loc:T HashWindow_CopySha256}" />
                     </Grid>
                     <Grid ColumnDefinitions="80,*,Auto">
-                        <TextBlock Grid.Column="0" Classes="hash-label" Text="SHA-512" />
+                        <TextBlock Grid.Column="0" Classes="hash-label" Text="{loc:T HashWindow_Sha512}" />
                         <TextBox Grid.Column="1" Classes="monospace hash" Text="{Binding Sha512}" />
-                        <Button Grid.Column="2" Classes="copy" Content="Copy" Click="Copy_Click" Tag="{Binding Sha512}" ToolTip.Tip="Copy SHA-512" />
+                        <Button Grid.Column="2" Classes="copy" Content="{loc:T HashWindow_Copy}" Click="Copy_Click" Tag="{Binding Sha512}" ToolTip.Tip="{loc:T HashWindow_CopySha512}" />
                     </Grid>
                 </StackPanel>
             </StackPanel>

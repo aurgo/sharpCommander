@@ -31,9 +31,30 @@ public sealed class UserSettings
     public string? LastRightPanelPath { get; set; }
 
     /// <summary>
+    /// The tabs of the last session, both panes together. Empty on a first run or after an upgrade, in which
+    /// case each pane starts with a single tab on its last folder.
+    /// </summary>
+    public List<TabState> Tabs { get; set; } = [];
+
+    /// <summary>Saved SFTP servers. Passwords are never here: they live in the platform keychain.</summary>
+    public List<SftpSite> SftpSites { get; set; } = [];
+
+    /// <summary>
     /// Gets or sets the theme: "System", "Light" or "Dark".
     /// </summary>
     public string Theme { get; set; } = "System";
+
+    /// <summary>Interface language: a culture name ("en", "es") or "System" to follow the operating system.</summary>
+    public string Language { get; set; } = "System";
+
+    /// <summary>
+    /// Whether to look for a new release on startup. It contacts github.com, so it is a setting rather than a
+    /// given; the Help menu can always check on demand.
+    /// </summary>
+    public bool CheckForUpdates { get; set; } = true;
+
+    /// <summary>When the last automatic check ran, so startup asks at most once a day.</summary>
+    public DateTime? LastUpdateCheck { get; set; }
 
     /// <summary>
     /// Gets or sets whether hidden entries (Hidden attribute, dotfiles on Unix) are listed.

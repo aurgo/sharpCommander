@@ -49,7 +49,10 @@ public static class PanelBrushes
 /// </summary>
 public static class PanelConverters
 {
-    /// <summary>Entry to the text of the size column: the size for files and drives, "&lt;DIR&gt;" for folders.</summary>
+    /// <summary>
+    /// Entry to the text of the size column: the size for files and drives, "&lt;DIR&gt;" for folders until one
+    /// has been measured.
+    /// </summary>
     public static IValueConverter EntrySize { get; } = new EntrySizeConverter();
 
     /// <summary>Entry to the text of the modified column; empty for drives and unknown dates.</summary>
@@ -78,6 +81,7 @@ public static class PanelConverters
             {
                 FileSystemEntry { EntryType: FileSystemEntryType.File } file => FileSizeFormatter.FormatForDisplay(file.Size),
                 FileSystemEntry { EntryType: FileSystemEntryType.Drive } drive => FileSizeFormatter.Format(drive.Size),
+                FileSystemEntry { EntryType: FileSystemEntryType.Directory, CalculatedSize: { } measured } => FileSizeFormatter.FormatForDisplay(measured),
                 FileSystemEntry { EntryType: FileSystemEntryType.Directory } => "<DIR>",
                 _ => string.Empty
             };

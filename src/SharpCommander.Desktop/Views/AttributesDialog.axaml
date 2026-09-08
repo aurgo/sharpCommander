@@ -1,0 +1,54 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SharpCommander.Desktop.Localization"
+        x:Class="SharpCommander.Desktop.Views.AttributesDialog"
+        Title="{loc:T AttributesDialog_ChangeAttributes}"
+        Width="380"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        ShowInTaskbar="False">
+    <Border Padding="20">
+        <StackPanel Spacing="10">
+            <TextBlock Name="PromptText" Classes="dialog-message" Text="{loc:T AttributesDialog_ChangeTheAttributesOf}" />
+
+            <StackPanel Name="WindowsAttributes" Spacing="4">
+                <CheckBox Name="ReadOnlyBox" Content="{loc:T AttributesDialog_ReadOnly}" IsThreeState="True" />
+                <CheckBox Name="HiddenBox" Content="{loc:T AttributesDialog_Hidden}" IsThreeState="True" />
+                <CheckBox Name="ArchiveBox" Content="{loc:T AttributesDialog_Archive}" IsThreeState="True" />
+                <CheckBox Name="SystemBox" Content="{loc:T AttributesDialog_System}" IsThreeState="True" />
+            </StackPanel>
+
+            <StackPanel Name="UnixPermissions" Spacing="6">
+                <CheckBox Name="ChangePermissionsBox" Content="{loc:T AttributesDialog_ChangePermissions}" />
+                <Grid ColumnDefinitions="70,*,*,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{loc:T AttributesDialog_Read}" HorizontalAlignment="Center" />
+                    <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:T AttributesDialog_Write}" HorizontalAlignment="Center" />
+                    <TextBlock Grid.Row="0" Grid.Column="3" Text="{loc:T AttributesDialog_Execute}" HorizontalAlignment="Center" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:T AttributesDialog_Owner}" VerticalAlignment="Center" />
+                    <CheckBox Grid.Row="1" Grid.Column="1" Name="OwnerRead" HorizontalAlignment="Center" />
+                    <CheckBox Grid.Row="1" Grid.Column="2" Name="OwnerWrite" HorizontalAlignment="Center" />
+                    <CheckBox Grid.Row="1" Grid.Column="3" Name="OwnerExecute" HorizontalAlignment="Center" />
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:T AttributesDialog_Group}" VerticalAlignment="Center" />
+                    <CheckBox Grid.Row="2" Grid.Column="1" Name="GroupRead" HorizontalAlignment="Center" />
+                    <CheckBox Grid.Row="2" Grid.Column="2" Name="GroupWrite" HorizontalAlignment="Center" />
+                    <CheckBox Grid.Row="2" Grid.Column="3" Name="GroupExecute" HorizontalAlignment="Center" />
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:T AttributesDialog_Others}" VerticalAlignment="Center" />
+                    <CheckBox Grid.Row="3" Grid.Column="1" Name="OtherRead" HorizontalAlignment="Center" />
+                    <CheckBox Grid.Row="3" Grid.Column="2" Name="OtherWrite" HorizontalAlignment="Center" />
+                    <CheckBox Grid.Row="3" Grid.Column="3" Name="OtherExecute" HorizontalAlignment="Center" />
+                </Grid>
+            </StackPanel>
+
+            <CheckBox Name="RecursiveBox" Content="{loc:T AttributesDialog_ApplyToTheContentsOfFolders}" />
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
+                <Button Name="OkButton" Classes="dialog-button" Content="{loc:T AttributesDialog_Apply}" IsDefault="True" Click="Ok_Click" />
+                <Button Name="CancelButton" Classes="dialog-button" Content="{loc:T AttributesDialog_Cancel}" IsCancel="True" Click="Cancel_Click" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

@@ -252,6 +252,227 @@ public sealed class FileSystemService : IFileSystemService
         }, cancellationToken);
     }
 
+    public Task<int> ApplyAttributesAsync(IReadOnlyList<string> paths, AttributeChange change, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        ArgumentNullException.ThrowIfNull(change);
+
+        if (change.IsEmpty)
+        {
+            return Task.FromResult(0);
+        }
+
+        return Task.Run(() =>
+        {
+            var changed = 0;
+
+            foreach (var path in paths)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                changed += ApplyTo(path, change, cancellationToken);
+            }
+
+            return changed;
+        }, cancellationToken);
+    }
+
+    private static int ApplyTo(string path, AttributeChange change, CancellationToken cancellationToken)
+    {
+        var changed = 0;
+        var isDirectory = Directory.Exists(path);
+
+        if (!isDirectory && !File.Exists(path))
+        {
+            return 0;
+        }
+
+        try
+        {
+            var attributes = File.GetAttributes(path);
+            var wanted = attributes;
+
+            wanted = Toggle(wanted, FileAttributes.ReadOnly, change.ReadOnly);
+            wanted = Toggle(wanted, FileAttributes.Hidden, change.Hidden);
+            wanted = Toggle(wanted, FileAttributes.Archive, change.Archive);
+            wanted = Toggle(wanted, FileAttributes.System, change.System);
+
+            if (wanted != attributes)
+            {
+                File.SetAttributes(path, wanted);
+                changed++;
+            }
+
+            // Unix permissions are a separate call and only exist off Windows.
+            if (change.UnixMode is { } mode && !OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(path, mode);
+                changed++;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            // Protected or vanished: counted as unchanged, the caller reports the shortfall.
+            AppLog.Warning($"The attributes of '{path}' could not be changed.", ex);
+        }
+
+        if (!change.Recursive || !isDirectory)
+        {
+            return changed;
+        }
+
+        var options = new EnumerationOptions
+        {
+            RecurseSubdirectories = false,
+            IgnoreInaccessible = true,
+            AttributesToSkip = FileAttributes.None
+        };
+
+        foreach (var child in Directory.EnumerateFileSystemEntries(path, "*", options))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            changed += ApplyTo(child, change, cancellationToken);
+        }
+
+        return changed;
+    }
+
+    private static FileAttributes Toggle(FileAttributes attributes, FileAttributes flag, bool? wanted)
+    {
+        return wanted switch
+        {
+            true => attributes | flag,
+            false => attributes & ~flag,
+            _ => attributes
+        };
+    }
+
+    public Task<long> FindFirstDifferenceAsync(string leftPath, string rightPath, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(leftPath);
+        ArgumentException.ThrowIfNullOrEmpty(rightPath);
+
+        return Task.Run(async () =>
+        {
+            // The same file compared with itself is identical without reading a byte.
+            if (PathUtils.AreSamePath(leftPath, rightPath))
+            {
+                return -1L;
+            }
+
+            const int BufferSize = 64 * 1024;
+
+            await using var left = new FileStream(leftPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, BufferSize, useAsync: true);
+            await using var right = new FileStream(rightPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, BufferSize, useAsync: true);
+
+            var leftBuffer = new byte[BufferSize];
+            var rightBuffer = new byte[BufferSize];
+            long offset = 0;
+
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var leftRead = await ReadBlockAsync(left, leftBuffer, cancellationToken);
+                var rightRead = await ReadBlockAsync(right, rightBuffer, cancellationToken);
+                var common = Math.Min(leftRead, rightRead);
+
+                var difference = leftBuffer.AsSpan(0, common).CommonPrefixLength(rightBuffer.AsSpan(0, common));
+                if (difference < common)
+                {
+                    return offset + difference;
+                }
+
+                // One ended before the other: the shorter file is a prefix of the longer one.
+                if (leftRead != rightRead)
+                {
+                    return offset + common;
+                }
+
+                if (leftRead == 0)
+                {
+                    return -1L;
+                }
+
+                offset += leftRead;
+            }
+        }, cancellationToken);
+    }
+
+    /// <summary>Fills the buffer as far as the stream allows; a short read does not mean end of file.</summary>
+    private static async Task<int> ReadBlockAsync(Stream stream, byte[] buffer, CancellationToken cancellationToken)
+    {
+        var total = 0;
+        while (total < buffer.Length)
+        {
+            var read = await stream.ReadAsync(buffer.AsMemory(total), cancellationToken);
+            if (read == 0)
+            {
+                break;
+            }
+
+            total += read;
+        }
+
+        return total;
+    }
+
+    public Task OpenTerminalAsync(string directory, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(directory);
+
+        if (!Directory.Exists(directory))
+        {
+            throw new DirectoryNotFoundException($"The folder '{directory}' does not exist.");
+        }
+
+        return Task.Run(() =>
+        {
+            foreach (var startInfo in TerminalCandidates(directory))
+            {
+                try
+                {
+                    using var process = Process.Start(startInfo);
+                    if (process is not null)
+                    {
+                        return;
+                    }
+                }
+                catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+                {
+                    // Not installed on this machine: try the next one.
+                }
+            }
+
+            throw new InvalidOperationException("No terminal emulator could be started.");
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// The terminals to try, best first. Linux has no single answer, so the common emulators are attempted in
+    /// turn and the first one that starts wins.
+    /// </summary>
+    private static IEnumerable<ProcessStartInfo> TerminalCandidates(string directory)
+    {
+        if (OperatingSystem.IsMacOS())
+        {
+            yield return new ProcessStartInfo("open", ["-a", "Terminal", directory]) { UseShellExecute = false };
+            yield break;
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            // Windows Terminal when present, the console host otherwise.
+            yield return new ProcessStartInfo("wt.exe", ["-d", directory]) { UseShellExecute = false };
+            yield return new ProcessStartInfo("cmd.exe") { WorkingDirectory = directory, UseShellExecute = true };
+            yield break;
+        }
+
+        foreach (var terminal in new[] { "x-terminal-emulator", "gnome-terminal", "konsole", "xfce4-terminal", "alacritty", "kitty", "xterm" })
+        {
+            yield return new ProcessStartInfo(terminal) { WorkingDirectory = directory, UseShellExecute = false };
+        }
+    }
+
     public Task<long> GetDirectorySizeAsync(string path, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);

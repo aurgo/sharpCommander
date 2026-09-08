@@ -1,8 +1,9 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SharpCommander.Desktop.Localization"
         xmlns:models="using:SharpCommander.Core.Models"
         x:Class="SharpCommander.Desktop.Views.OperationErrorsDialog"
-        Title="Errors"
+        Title="{loc:T OperationErrorsDialog_Errors}"
         Width="640" Height="420"
         MinWidth="480" MinHeight="280"
         WindowStartupLocation="CenterOwner"
@@ -12,8 +13,8 @@
             <TextBlock DockPanel.Dock="Top" Name="SummaryText" Classes="dialog-title" Margin="0,0,0,12" />
 
             <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
-                <Button Name="CopyAllButton" Classes="dialog-button" Content="Copy all" Click="CopyAll_Click" />
-                <Button Name="CloseButton" Classes="dialog-button" Content="Close" IsDefault="True" IsCancel="True" Click="Close_Click" />
+                <Button Name="CopyAllButton" Classes="dialog-button" Content="{loc:T OperationErrorsDialog_CopyAll}" Click="CopyAll_Click" />
+                <Button Name="CloseButton" Classes="dialog-button" Content="{loc:T OperationErrorsDialog_Close}" IsDefault="True" IsCancel="True" Click="Close_Click" />
             </StackPanel>
 
             <ListBox Name="ErrorsList" BorderThickness="1" BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" CornerRadius="4">

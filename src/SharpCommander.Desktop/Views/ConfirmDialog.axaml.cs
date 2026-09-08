@@ -6,7 +6,8 @@ namespace SharpCommander.Desktop.Views;
 
 /// <summary>
 /// Yes/no question. Enter confirms, Escape cancels; a destructive confirmation gets a red confirm button.
-/// The dialog result is true when confirmed.
+/// The dialog result is true when confirmed. With no cancel text it becomes a plain message with one button,
+/// which is what an answer to something the user asked for looks like.
 /// </summary>
 public partial class ConfirmDialog : Window
 {
@@ -23,6 +24,10 @@ public partial class ConfirmDialog : Window
         MessageText.Text = message;
         ConfirmButton.Content = confirmText;
         CancelButton.Content = cancelText;
+
+        // No cancel text means there is nothing to decide: hide the second button rather than offering a
+        // meaningless choice.
+        CancelButton.IsVisible = !string.IsNullOrEmpty(cancelText);
 
         // A prompt that follows another confirmation arms the safe button instead of its own: the trash refusing
         // an item asks again right after the user answered "Move to Trash" with Enter, so a still-repeating or

@@ -72,6 +72,50 @@ public sealed class FakeDialogService : IDialogService
         return Task.CompletedTask;
     }
 
+    /// <summary>What the SFTP server dialog answers; null means the user cancelled.</summary>
+    public SftpSite? SftpSiteAnswer { get; set; }
+
+    public Task<SftpSite?> ShowSftpSiteDialogAsync(SftpSite? existing)
+    {
+        Calls.Add("sftp-site");
+        return Task.FromResult(SftpSiteAnswer);
+    }
+
+    /// <summary>The server the connect dialog answers with; null means the user cancelled.</summary>
+    public SftpSite? SftpConnectAnswer { get; set; }
+
+    /// <summary>The password the connect dialog answers with.</summary>
+    public string? SftpPasswordAnswer { get; set; }
+
+    public Task<(SftpSite? Site, string? Password)> ShowSftpConnectAsync()
+    {
+        Calls.Add("sftp-connect");
+        return Task.FromResult((SftpConnectAnswer, SftpPasswordAnswer));
+    }
+
+    /// <summary>What the attributes dialog answers; null means the user cancelled.</summary>
+    public AttributeChange? AttributesAnswer { get; set; }
+
+    public Task<AttributeChange?> ShowAttributesDialogAsync(string prompt, UnixFileMode? currentMode)
+    {
+        Calls.Add("attributes:" + prompt);
+        SeenUnixMode = currentMode;
+        return Task.FromResult(AttributesAnswer);
+    }
+
+    /// <summary>The mode the dialog was seeded with on the last call.</summary>
+    public UnixFileMode? SeenUnixMode { get; private set; }
+
+    /// <summary>Messages shown with ShowMessageAsync, as "title|message".</summary>
+    public List<string> Messages { get; } = [];
+
+    public Task ShowMessageAsync(string title, string message)
+    {
+        Calls.Add("message:" + title);
+        Messages.Add($"{title}|{message}");
+        return Task.CompletedTask;
+    }
+
     public Task<string?> ShowInputDialogAsync(string title, string prompt, string initialValue = "", Func<string, string?>? validate = null)
     {
         Calls.Add("input:" + title);

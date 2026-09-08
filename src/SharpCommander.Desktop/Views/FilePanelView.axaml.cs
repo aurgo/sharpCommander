@@ -526,6 +526,17 @@ public partial class FilePanelView : UserControl
         _pressPoint = null;
 
         var point = e.GetCurrentPoint(FileListBox);
+
+        // The middle click opens the row under the pointer in a new tab. It is claimed whether or not it landed
+        // on a row, so the ListBox never sees it: otherwise it would move the selection, and on X11 the press
+        // would also arrive as a primary-selection paste.
+        if (point.Properties.IsMiddleButtonPressed)
+        {
+            OpenInNewTab(RowEntryAt(e.Source));
+            e.Handled = true;
+            return;
+        }
+
         if (!point.Properties.IsLeftButtonPressed || e.KeyModifiers != KeyModifiers.None)
         {
             return;
@@ -544,6 +555,36 @@ public partial class FilePanelView : UserControl
     private void OnListPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
         _pressPoint = null;
+    }
+
+    /// <summary>The entry of the list row <paramref name="source"/> sits in, or null when it is not on a row.</summary>
+    private static FileSystemEntry? RowEntryAt(object? source)
+    {
+        return (source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true) is { DataContext: FileSystemEntry entry }
+            ? entry
+            : null;
+    }
+
+    /// <summary>
+    /// Hands <paramref name="entry"/> to the main view model to be opened in a new tab. This panel is passed
+    /// along so the tab is owned by the side that was clicked, not by whichever side happens to hold the focus.
+    /// The middle click and the context menu both come through here; what may be opened is decided there.
+    /// </summary>
+    private void OpenInNewTab(FileSystemEntry? entry)
+    {
+        if (entry is null || _viewModel is not { } panel || _mainViewModel is not { } main)
+        {
+            return;
+        }
+
+        // Fire and forget: the view model guards the whole operation and reports failures itself.
+        _ = main.OpenInNewTabAsync(panel, entry);
+    }
+
+    /// <summary>The "Open in New Tab" context menu entry, which acts on the selected row.</summary>
+    private void OnOpenInNewTabClick(object? sender, RoutedEventArgs e)
+    {
+        OpenInNewTab(_viewModel?.SelectedEntry);
     }
 
     private async void ListBox_PointerMoved(object? sender, PointerEventArgs e)

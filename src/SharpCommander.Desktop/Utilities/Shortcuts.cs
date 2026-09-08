@@ -30,6 +30,14 @@ public static class Shortcuts
     public static KeyGesture CloseTab { get; } = new(Key.W, CommandModifier);
     public static KeyGesture NextTab { get; } = new(Key.Tab, CommandModifier);
     public static KeyGesture PreviousTab { get; } = new(Key.Tab, CommandModifier | KeyModifiers.Shift);
+    public static KeyGesture DuplicateTab { get; } = new(Key.T, CommandModifier | KeyModifiers.Shift);
+    public static KeyGesture CopyPath { get; } = new(Key.C, CommandModifier | KeyModifiers.Shift);
+    public static KeyGesture OpenTerminal { get; } = new(Key.T, CommandModifier | KeyModifiers.Alt);
+    public static KeyGesture InvertSelection { get; } = new(Key.Multiply, KeyModifiers.None);
+    public static KeyGesture SelectByPattern { get; } = new(Key.Add, KeyModifiers.None);
+    public static KeyGesture UnselectByPattern { get; } = new(Key.Subtract, KeyModifiers.None);
+    public static KeyGesture Undo { get; } = new(Key.Z, CommandModifier);
+    public static KeyGesture FolderSize { get; } = new(Key.Space, KeyModifiers.Alt);
 
     /// <summary>Tooltip texts that mention a shortcut, so the XAML shows the platform's key.</summary>
     public static string RefreshPanelsToolTip { get; } = $"Refresh both panels ({Describe(Refresh)})";

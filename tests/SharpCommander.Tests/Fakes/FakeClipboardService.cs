@@ -29,6 +29,18 @@ public sealed class FakeClipboardService : IClipboardService
         return Task.CompletedTask;
     }
 
+    /// <summary>The last text written with <see cref="SetTextAsync"/>.</summary>
+    public string? Text { get; private set; }
+
+    public Task SetTextAsync(string text)
+    {
+        Text = text;
+        Paths = [];
+        IsCutMode = false;
+        Calls.Add("text");
+        return Task.CompletedTask;
+    }
+
     public Task<IReadOnlyList<string>> GetPathsAsync()
     {
         Calls.Add("get");

@@ -1,12 +1,13 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SharpCommander.Desktop.Localization"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:SharpCommander.Desktop.ViewModels"
         mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="450"
         x:Class="SharpCommander.Desktop.Views.AboutWindow"
         x:DataType="vm:AboutViewModel"
-        Title="About SharpCommander"
+        Title="{loc:T AboutWindow_AboutSharpcommander}"
         Width="500" Height="450"
         CanResize="False"
         WindowStartupLocation="CenterOwner"
@@ -40,7 +41,7 @@
             <!-- Close Button -->
             <Button x:Name="CloseButton"
                     DockPanel.Dock="Bottom"
-                    Content="Close"
+                    Content="{loc:T AboutWindow_Close}"
                     HorizontalAlignment="Right"
                     Padding="24,8"
                     IsDefault="True"
@@ -76,7 +77,7 @@
 
                     <!-- Features -->
                     <StackPanel Spacing="4">
-                        <TextBlock Text="Features:" FontWeight="SemiBold" Margin="0,8,0,4" />
+                        <TextBlock Text="{loc:T AboutWindow_Features}" FontWeight="SemiBold" Margin="0,8,0,4" />
                         <ItemsControl ItemsSource="{Binding Features}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>

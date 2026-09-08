@@ -14,16 +14,22 @@
     <IsAotCompatible>true</IsAotCompatible>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+    <!--
+      No satellite resource assemblies: the translations live in SharpCommander.Desktop.Localization as plain
+      dictionaries, which need no ResourceManager and survive trimming and AOT untouched.
+    -->
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <!--
     Publishing configuration. All publish scripts rely on these defaults so every platform ships the same way:
-    self-contained, partially trimmed (Avalonia.Controls.DataGrid is not fully trim-safe), no debug symbols.
+    self-contained, single-file, partially trimmed (Avalonia.Controls.DataGrid is not fully trim-safe), no debug
+    symbols. Single-file is skipped under AOT, which already emits one native binary.
     Applied only when publishing, so a plain Release build keeps working without a RID.
   -->
   <PropertyGroup Condition="'$(_IsPublishing)' == 'true'">
     <SelfContained>true</SelfContained>
+    <PublishSingleFile Condition="'$(PublishAot)' != 'true'">true</PublishSingleFile>
     <PublishTrimmed>true</PublishTrimmed>
     <TrimMode>partial</TrimMode>
     <InvariantGlobalization>false</InvariantGlobalization>
@@ -38,6 +44,10 @@
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.20" />
     <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.3.13" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="SSH.NET" Version="2026.0.0" />
+
+    <!-- DPAPI, for the Windows password fallback. Other platforms use their own keychain and never load it. -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
   </ItemGroup>
 
   <ItemGroup>
