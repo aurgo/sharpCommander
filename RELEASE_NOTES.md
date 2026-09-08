@@ -2,6 +2,104 @@
 
 ---
 
+# SharpCommander v2.2.0
+
+## 🚀 Resumen
+
+La 2.1.0 dejó la aplicación segura y completa como gestor local. La 2.2.0 rompe esa frontera: **un panel puede apuntar a un servidor SFTP y comportarse como cualquier otro**. Alrededor de eso llega el resto de herramientas que faltaban — deshacer, archivos comprimidos, comparación de carpetas, permisos — y la interfaz en español.
+
+---
+
+## 🌐 Paneles remotos por SFTP
+
+- **Un panel, un servidor** — El botón **Servidor** de la barra, o *Herramientas → Conectar a servidor…*, apuntan el panel activo a `sftp://usuario@host/ruta`. A partir de ahí es un panel normal: F5, F6, F7, F8, renombrar y calcular tamaño funcionan igual, y copiar al panel contrario transfiere los ficheros en la dirección que toque.
+- **Transferencias en ambos sentidos** — Ficheros y carpetas completas, subiendo y bajando. Dentro del mismo servidor los datos no salen a la red. Descargar algo que ya existe no sobrescribe: deja los dos.
+- **Lo que un servidor no puede hacer, lo dice** — Abrir terminal, mostrar en el gestor del sistema o comparar byte a byte avisan en vez de fingir. Abrir un fichero remoto sí funciona: se descarga y se abre con la aplicación local.
+- **Credenciales en el llavero del sistema**, nunca en `settings.json`. La contraseña llega a la herramienta del llavero por entrada estándar, así que no aparece en la lista de procesos. Autenticación por clave privada de `~/.ssh` o por contraseña.
+- **Clave de host** — Se acepta la primera vez y se recuerda durante la sesión; si cambia a mitad de sesión, la conexión **se rechaza** en vez de confiar.
+
+## 🌍 Español
+
+- Interfaz completa en español, **con cambio en caliente**: se elige en *Ver → Idioma* y no hace falta reiniciar. Por defecto sigue al sistema.
+- La mayoría de mensajes de estado del motor siguen en inglés; es lo que queda por traducir.
+
+## 🔄 Actualizaciones
+
+- **Comprobación semanal al arrancar** contra las releases de GitHub, y a demanda desde *Ayuda → Buscar actualizaciones*. La automática se calla salvo que haya algo nuevo; la manual siempre responde.
+- Solo lee y te lleva a la página de descargas: reemplazar la aplicación en marcha exige firma, permisos y reemplazo atómico distintos por plataforma, y hecho a medias deja una instalación irreparable.
+- Se puede desactivar en *Ayuda → Comprobar al iniciar*.
+
+## ↩️ Deshacer (Ctrl+Z)
+
+- Revierte la última copia, movimiento, renombrado o carpeta creada. Deshacer una copia solo borra lo que esa copia creó, y pregunta antes.
+- **Borrar no se puede deshacer**, y no se ofrece: la papelera del sistema no expone forma de restaurar, así que prometerlo sería mentir.
+
+## 📦 Archivos comprimidos
+
+- **Empaquetar y extraer** zip, tar y tar.gz, hacia el panel contrario.
+- Ambos formatos **rechazan una entrada que escaparía de la carpeta destino**, de modo que un archivo malicioso no puede escribir en otro sitio del disco.
+- Empaquetar nunca sobrescribe, y un archivo a medias se borra si algo falla.
+
+## 🔍 Comparar y sincronizar
+
+- **Comparar carpetas** por tamaño y fecha, seleccionando en cada panel lo que falta o difiere. Cancelable.
+- **Sincronizar** copia en un sentido dejando intactos los extras del destino. **Espejo** además borra lo que sobra, con su propia confirmación.
+- **Comparar dos ficheros** byte a byte, indicando en qué posición difieren.
+
+## 🔐 Atributos y permisos
+
+- Diálogo para cambiar atributos y permisos Unix, opcionalmente recursivo. Con varios elementos las casillas empiezan indeterminadas: dejar como está es una opción, porque no tienen por qué coincidir.
+
+## 🗂️ Pestañas por panel
+
+- **Cada pestaña pertenece a un panel**: las abiertas desde el izquierdo se agrupan a la izquierda de la barra, las del derecho a la derecha, cada grupo con su propio **+**. Cambiar de pestaña mueve solo su panel; el contrario se queda donde estaba.
+- **Sobreviven al reinicio**, incluido cuál mostraba cada panel.
+- Clic central sobre una carpeta la abre en pestaña nueva. Duplicar (Ctrl+Mayús+T) y **fijar**: una pestaña fijada conserva su carpeta y no se cierra.
+
+## ⚡ Selección y utilidades
+
+- **Selección por patrón** — `+` y `-` del teclado numérico con máscaras tipo `*.cs;*.md`, acumulables; `*` invierte la selección.
+- **Tamaño de carpeta** (Alt+Espacio), que sobrevive a un refresco.
+- **Copiar ruta** (Ctrl+Mayús+C) y **abrir terminal aquí** (Ctrl+Alt+T).
+
+---
+
+## 📥 Descargas
+
+| Plataforma | Archivo |
+|---|---|
+| Windows x64 | `SharpCommander-v2.2.0-win-x64.zip` |
+| Windows x86 | `SharpCommander-v2.2.0-win-x86.zip` |
+| Windows ARM64 | `SharpCommander-v2.2.0-win-arm64.zip` |
+| Linux x64 | `SharpCommander-v2.2.0-linux-x64.zip` |
+| Linux ARM64 | `SharpCommander-v2.2.0-linux-arm64.zip` |
+| macOS Intel | `SharpCommander-v2.2.0-osx-x64.zip` |
+| macOS Apple Silicon | `SharpCommander-v2.2.0-osx-arm64.zip` |
+
+Autocontenidos: no requieren .NET instalado.
+
+### macOS
+
+El ZIP contiene `SharpCommander.app` y un **`install.sh`** al lado. La aplicación va firmada ad-hoc pero **sin notarizar**, así que macOS la pone en cuarentena al descargarla y se niega a abrirla. Para instalarla, abre el Terminal en la carpeta extraída y ejecuta:
+
+```bash
+./install.sh
+```
+
+El script comprueba la firma, copia la aplicación a `/Applications` y quita la marca de cuarentena. Si prefieres no usarlo: ábrela, deja que macOS la bloquee, y en *Ajustes del Sistema → Privacidad y seguridad* pulsa **Abrir de todos modos**.
+
+### Windows
+
+SmartScreen puede avisar de que es un editor desconocido: *Más información → Ejecutar de todas formas*.
+
+## ⚠️ Notas
+
+- **SFTP no se ha probado contra un servidor real.** El enrutado local/remoto está cubierto por pruebas automatizadas con un servidor en memoria, pero el protocolo contra un host de verdad no se ha ejercitado. Si lo usas, hazlo primero con datos que no te importe perder.
+- Copiar directamente **entre dos servidores** no está soportado; hay que pasar por una carpeta local.
+- **434 pruebas automatizadas** (245 en la 2.1.0).
+
+---
+
 # SharpCommander v2.1.0
 
 ## 🚀 Resumen
