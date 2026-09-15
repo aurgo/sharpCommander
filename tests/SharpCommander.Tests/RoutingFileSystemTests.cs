@@ -48,6 +48,36 @@ public class RoutingFileSystemTests
         Assert.Equal(dir.Path, router.GetParentPath(file));
     }
 
+    /// <summary>
+    /// A server never sends ".."; the router adds it, as every other listing has one. Without it a remote
+    /// folder was the only place in the application with no way back up in the list itself.
+    /// </summary>
+    [Fact]
+    public async Task ARemoteListingOpensWithAWayBackUp()
+    {
+        var (router, server) = Build();
+        server.AddFile("/home/ana/notes.txt", "hello");
+
+        var entries = await router.GetEntriesAsync($"{Remote}/home/ana");
+
+        var parent = entries[0];
+        Assert.Equal("..", parent.Name);
+        Assert.Equal(FileSystemEntryType.ParentDirectory, parent.EntryType);
+        Assert.Equal($"{Remote}/home", parent.FullPath);
+    }
+
+    [Fact]
+    public async Task TheRootOfAServerHasNoWayBackUp()
+    {
+        var (router, server) = Build();
+        server.AddDirectory("/home");
+
+        var entries = await router.GetEntriesAsync($"{Remote}/");
+
+        Assert.DoesNotContain(entries, entry => entry.EntryType == FileSystemEntryType.ParentDirectory);
+        Assert.Contains(entries, entry => entry.FullPath == $"{Remote}/home");
+    }
+
     [Fact]
     public void RemoteParentStaysOnTheServer()
     {

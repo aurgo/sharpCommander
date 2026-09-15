@@ -244,6 +244,29 @@ public class FilePanelViewModelTests
 
     // ---- M8: typed paths -------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// A server address is a path like any other to the panel, but not to <see cref="Path.GetFullPath"/>: it
+    /// reads "sftp://ana@example.com:22/home/ana" as a relative name and resolves it against the process's
+    /// working directory, so the folder a fresh connection lands in was reported as missing.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task NavigateTo_RemoteAddress_ListsTheServerFolder()
+    {
+        var server = new FakeSftpServer();
+        server.AddFile("/home/ana/notes.txt", "hello");
+        server.AddDirectory("/home/ana/docs");
+        var connections = new SftpConnections(() => server);
+        await connections.ConnectAsync(new SftpSite { Host = "example.com", Port = 22, Username = "ana" }, null);
+        var harness = new Harness(new RoutingFileSystemService(RealFileSystem, connections));
+        var panel = harness.Panel;
+
+        await panel.NavigateToAsync("sftp://ana@example.com:22/home/ana");
+
+        Assert.Equal("sftp://ana@example.com:22/home/ana", panel.CurrentPath);
+        Assert.Equal(new[] { "..", "docs", "notes.txt" }, Names(panel));
+        Assert.Empty(harness.Dialogs.Calls);
+    }
+
     [AvaloniaFact]
     public async Task NavigateTo_MissingPath_KeepsTheFolderAndReports()
     {

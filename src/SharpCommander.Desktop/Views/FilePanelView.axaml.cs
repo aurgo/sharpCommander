@@ -161,11 +161,16 @@ public partial class FilePanelView : UserControl
         }
     }
 
-    /// <summary>Marks the header of the active panel so the user sees where F5/F6 will act.</summary>
+    /// <summary>
+    /// Marks the active panel so the user sees where F5/F6 will act: the header gets the accent underline, and
+    /// the list keeps the accent-coloured selection. The other panel's selection goes grey — both lists keep a
+    /// selection at all times, and two identical highlights said nothing about which one the keys would reach.
+    /// </summary>
     private void UpdateActiveState()
     {
         var isActive = _viewModel is not null && _mainViewModel is not null && ReferenceEquals(_mainViewModel.ActivePanel, _viewModel);
         PanelHeader.Classes.Set(ActiveClass, isActive);
+        FileListBox.Classes.Set(ActiveClass, isActive);
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)

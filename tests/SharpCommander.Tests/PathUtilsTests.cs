@@ -177,4 +177,40 @@ public class NaturalStringComparerTests
     {
         Assert.Throws<ArgumentException>(() => PathUtils.WildcardToRegex("   "));
     }
+
+    /// <summary>
+    /// "~/.ssh/my-key" is what people type wherever a path is asked for, and what every ssh command takes. The
+    /// file system does not: unexpanded, it becomes a folder named "~" that is never there.
+    /// </summary>
+    [Fact]
+    public void ExpandUserPath_ResolvesTheHomeShortcut()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+        Assert.Equal(home, PathUtils.ExpandUserPath("~"));
+        Assert.Equal(Path.Combine(home, ".ssh", "id_ed25519"), PathUtils.ExpandUserPath("~/.ssh/id_ed25519"));
+        Assert.Equal(Path.Combine(home, "Documents"), PathUtils.ExpandUserPath(@"~\Documents"));
+    }
+
+    [Fact]
+    public void ExpandUserPath_LeavesEverythingElseAlone()
+    {
+        using var dir = new TempDir();
+
+        Assert.Equal(dir.Path, PathUtils.ExpandUserPath(dir.Path));
+        Assert.Equal(string.Empty, PathUtils.ExpandUserPath(null));
+        Assert.Equal("   ", PathUtils.ExpandUserPath("   "));
+
+        // A name that merely starts with a tilde is a name, not the home folder.
+        Assert.Equal("~backup.txt", PathUtils.ExpandUserPath("~backup.txt"));
+    }
+
+    [Fact]
+    public void ExpandUserPath_DropsTheQuotesADraggedPathArrivesIn()
+    {
+        using var dir = new TempDir();
+
+        Assert.Equal(dir.Path, PathUtils.ExpandUserPath($"  \"{dir.Path}\"  "));
+        Assert.Equal(dir.Path, PathUtils.ExpandUserPath($"'{dir.Path}'"));
+    }
 }

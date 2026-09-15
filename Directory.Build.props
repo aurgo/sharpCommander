@@ -1,7 +1,7 @@
 <Project>
   <!-- Single source of truth for version and metadata (L11). -->
   <PropertyGroup>
-    <Version>2.2.0</Version>
+    <Version>2.2.1</Version>
     <Authors>AURGO</Authors>
     <Company>AURGO</Company>
     <Product>SharpCommander</Product>

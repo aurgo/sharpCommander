@@ -57,7 +57,11 @@ public class MainWindowTests
 
         public FilePanelView LeftView => Window.FindControl<FilePanelView>("LeftPanelView")!;
 
+        public FilePanelView RightView => Window.FindControl<FilePanelView>("RightPanelView")!;
+
         public ListBox LeftList => LeftView.FindControl<ListBox>("FileListBox")!;
+
+        public ListBox RightList => RightView.FindControl<ListBox>("FileListBox")!;
 
         /// <summary>Shows the window and waits for the view model initialization the window starts on Loaded.</summary>
         public async Task ShowAsync()
@@ -424,6 +428,32 @@ public class MainWindowTests
         list.SelectedIndex = 0; // ".." can be the cursor, but never part of a multi-selection
         await PumpAsync();
         Assert.Equal(FileSystemEntryType.ParentDirectory, harness.LeftPanel.SelectedEntry?.EntryType);
+    }
+
+    /// <summary>
+    /// Both panels keep a selected row at all times, so the colour of the selection is what says where F5, F6
+    /// and the cursor keys will act: only the active list carries the class the accent style is written for,
+    /// and the other one falls to the grey one.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task OnlyTheActivePanel_MarksItsListAndHeaderAsActive()
+    {
+        using var harness = new Harness();
+        await harness.ShowAsync();
+
+        harness.ViewModel.SetActivePanel(harness.LeftPanel);
+        await PumpAsync();
+
+        Assert.Contains("active", harness.LeftList.Classes);
+        Assert.Contains("active", harness.LeftView.FindControl<Border>("PanelHeader")!.Classes);
+        Assert.DoesNotContain("active", harness.RightList.Classes);
+
+        harness.ViewModel.SetActivePanel(harness.RightPanel);
+        await PumpAsync();
+
+        Assert.DoesNotContain("active", harness.LeftList.Classes);
+        Assert.Contains("active", harness.RightList.Classes);
+        Assert.Contains("active", harness.RightView.FindControl<Border>("PanelHeader")!.Classes);
     }
 
     // ---- L8 / D5: favorites and shortcuts ----------------------------------------------------------------------

@@ -940,6 +940,34 @@ public class MainWindowViewModelTests
         Assert.Equal(left, vm.LeftTabs[0].Path);
     }
 
+    /// <summary>
+    /// Closing the last window raises the lifetime's shutdown after the window is already closed, so one more
+    /// save runs once the view model has been disposed and its tab collections emptied. That save used to
+    /// capture the empty collections over the session that had just been written, and every start came up with
+    /// a single tab per pane.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Tabs_SurviveASaveThatRunsAfterTheWindowIsClosed()
+    {
+        using var dir = new TempDir();
+        var left = dir.Dir("left");
+        var right = dir.Dir("right");
+        dir.Dir("left/target");
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, left, right);
+        await vm.OpenInNewTabAsync(vm.LeftPanel, vm.LeftPanel.FilteredEntries.Single(e => e.Name == "target"));
+
+        await vm.ShutdownAsync();
+        vm.Dispose();
+        await vm.SaveStateAsync();
+
+        var saved = harness.Settings.Settings.Tabs;
+        Assert.Equal(3, saved.Count);
+        Assert.Equal(2, saved.Count(tab => tab.Side == "Left"));
+        Assert.Equal([right], saved.Where(tab => tab.Side == "Right").Select(tab => tab.Path));
+    }
+
     [AvaloniaFact]
     public async Task PinnedTab_KeepsItsFolderAndOpensAnotherTab()
     {

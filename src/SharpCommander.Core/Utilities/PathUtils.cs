@@ -86,6 +86,33 @@ public static class PathUtils
     }
 
     /// <summary>
+    /// Expands what a person writes where a path is expected: a leading "~" for the home folder, environment
+    /// variables in the platform's own form ("%USERPROFILE%"), and the quotes a path arrives wrapped in when it
+    /// was dragged out of a file manager. Anything else is handed back untouched, so it is safe to call on a
+    /// path that needs no expanding. The file system knows nothing of "~": every path a user typed has to come
+    /// through here before it is looked up, or it silently becomes a folder named "~" next to the program.
+    /// </summary>
+    public static string ExpandUserPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return path ?? string.Empty;
+        }
+
+        var expanded = Environment.ExpandEnvironmentVariables(path.Trim().Trim('"', '\''));
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+        if (expanded == "~")
+        {
+            return home;
+        }
+
+        return expanded.Length > 1 && expanded[0] == '~' && (expanded[1] == '/' || expanded[1] == '\\')
+            ? Path.Combine(home, expanded[2..])
+            : expanded;
+    }
+
+    /// <summary>
     /// Returns the absolute form of <paramref name="path"/> without trailing separators.
     /// Roots keep their separator ("/" and "C:\").
     /// </summary>

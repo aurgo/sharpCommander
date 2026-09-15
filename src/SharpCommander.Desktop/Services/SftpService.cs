@@ -104,9 +104,23 @@ public sealed class SftpService : ISftpService
 
         return Task.Run(() =>
         {
-            if (!string.IsNullOrWhiteSpace(wanted) && client.Exists(wanted))
+            // The folder is a preference, not a requirement: left empty, gone, or one this account may not
+            // even look at, the connection still opens and lands wherever the server puts us.
+            if (!string.IsNullOrWhiteSpace(wanted))
             {
-                return RemotePath.Normalize(wanted);
+                try
+                {
+                    if (client.Exists(wanted))
+                    {
+                        return RemotePath.Normalize(wanted);
+                    }
+
+                    AppLog.Warning($"The initial folder '{wanted}' is not on the server; its own folder is used instead.");
+                }
+                catch (Exception ex) when (ex is SshException or ArgumentException)
+                {
+                    AppLog.Warning($"The initial folder '{wanted}' could not be checked; the server's own folder is used instead.", ex);
+                }
             }
 
             return RemotePath.Normalize(client.WorkingDirectory);
@@ -452,22 +466,32 @@ public sealed class SftpService : ISftpService
             return new ConnectionInfo(site.Host, site.Port, site.Username, new PasswordAuthenticationMethod(site.Username, secret));
         }
 
-        var keys = LoadKeys(site, secret);
+        // "~/.ssh/my-key" is what the field's own hint invites, and what every ssh command line takes; the file
+        // system takes no such thing, so the path is expanded before anything is looked up.
+        var named = string.IsNullOrWhiteSpace(site.KeyPath) ? null : PathUtils.ExpandUserPath(site.KeyPath);
+
+        var keys = LoadKeys(named, secret);
         if (keys.Count == 0)
         {
-            throw new FileNotFoundException("No usable private key was found. Set one on the site, or put a key in ~/.ssh.");
+            // Naming a key that cannot be used is a different problem from naming none, and telling someone who
+            // pointed at a key to "put a key in ~/.ssh" sends them looking in the wrong place entirely.
+            throw new FileNotFoundException(named is null
+                ? "No usable private key was found. Set one on the site, or put a key in ~/.ssh."
+                : File.Exists(named)
+                    ? $"The private key '{named}' could not be read. If it is protected by a passphrase, enter that as the password."
+                    : $"There is no private key at '{named}'.");
         }
 
         return new ConnectionInfo(site.Host, site.Port, site.Username, new PrivateKeyAuthenticationMethod(site.Username, [.. keys]));
     }
 
-    private static List<PrivateKeyFile> LoadKeys(SftpSite site, string? passphrase)
+    private static List<PrivateKeyFile> LoadKeys(string? namedKey, string? passphrase)
     {
         var candidates = new List<string>();
 
-        if (!string.IsNullOrWhiteSpace(site.KeyPath))
+        if (namedKey is not null)
         {
-            candidates.Add(site.KeyPath);
+            candidates.Add(namedKey);
         }
         else
         {

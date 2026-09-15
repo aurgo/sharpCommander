@@ -507,6 +507,110 @@ public class FileOperationsServiceTests
         Assert.Contains("confirm:Run program?", dialogs.Calls);
     }
 
+    // ---- transfers that cross to a server ------------------------------------------------------------------
+
+    private const string Remote = "sftp://ana@example.com:22";
+
+    private static (FileOperationsService Service, FakeDialogService Dialogs, FakeSftpServer Server) CreateWithServer()
+    {
+        var server = new FakeSftpServer();
+        var connections = new SftpConnections(() => server);
+        connections.ConnectAsync(new SftpSite { Host = "example.com", Port = 22, Username = "ana" }, null).GetAwaiter().GetResult();
+
+        var dialogs = new FakeDialogService();
+        var router = new RoutingFileSystemService(FileSystem, connections);
+        return (new FileOperationsService(router, dialogs, new FakeTrashService()), dialogs, server);
+    }
+
+    /// <summary>
+    /// Planning used to ask the local disk about every source, and a server address is not a path it knows: an
+    /// F5 out of a remote panel failed with "no longer exists" before a single byte was asked for.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Copy_FromAServerToTheLocalDisk_DownloadsTheFile()
+    {
+        using var dir = new TempDir();
+        var (service, dialogs, server) = CreateWithServer();
+        server.AddFile("/home/ana/notes.txt", "hello");
+
+        var result = await service.CopyAsync([$"{Remote}/home/ana/notes.txt"], dir.Path);
+
+        Assert.Equal(1, result.Succeeded);
+        Assert.Equal(0, result.Failed);
+        Assert.Equal("hello", File.ReadAllText(Path.Combine(dir.Path, "notes.txt")));
+        Assert.Empty(dialogs.ReportedErrors);
+    }
+
+    [AvaloniaFact]
+    public async Task Move_AFolderFromAServer_BringsItDownAndRemovesIt()
+    {
+        using var dir = new TempDir();
+        var (service, _, server) = CreateWithServer();
+        server.AddFile("/home/ana/docs/a.txt", "one");
+        server.AddFile("/home/ana/docs/b.txt", "two");
+
+        var result = await service.MoveAsync([$"{Remote}/home/ana/docs"], dir.Path);
+
+        Assert.Equal(1, result.Succeeded);
+        Assert.Equal("one", File.ReadAllText(Path.Combine(dir.Path, "docs", "a.txt")));
+        Assert.Equal("two", File.ReadAllText(Path.Combine(dir.Path, "docs", "b.txt")));
+        Assert.False(server.HasFile("/home/ana/docs/a.txt"));
+    }
+
+    [AvaloniaFact]
+    public async Task Copy_ToAServer_UploadsTheFile()
+    {
+        using var dir = new TempDir();
+        var (service, _, server) = CreateWithServer();
+        server.AddDirectory("/home/ana");
+        var file = dir.File("report.txt", "contents");
+
+        var result = await service.CopyAsync([file], $"{Remote}/home/ana");
+
+        Assert.Equal(1, result.Succeeded);
+        Assert.Equal("contents", server.ReadFile("/home/ana/report.txt"));
+    }
+
+    [AvaloniaFact]
+    public async Task Copy_OnTheServerIntoItsOwnFolder_IsRefusedUpFront()
+    {
+        var (service, _, server) = CreateWithServer();
+        server.AddFile("/home/ana/notes.txt", "hello");
+
+        var result = await service.CopyAsync([$"{Remote}/home/ana/notes.txt"], $"{Remote}/home/ana");
+
+        Assert.Equal(1, result.Failed);
+        Assert.Contains("same", result.Errors[0].Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("hello", server.ReadFile("/home/ana/notes.txt"));
+    }
+
+    [AvaloniaFact]
+    public async Task Copy_AServerFolderIntoItself_IsRefusedUpFront()
+    {
+        var (service, _, server) = CreateWithServer();
+        server.AddFile("/home/ana/docs/a.txt", "one");
+        server.AddDirectory("/home/ana/docs/sub");
+
+        var result = await service.CopyAsync([$"{Remote}/home/ana/docs"], $"{Remote}/home/ana/docs/sub");
+
+        Assert.Equal(1, result.Failed);
+        Assert.Contains("itself", result.Errors[0].Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(server.HasFile("/home/ana/docs/sub/docs/a.txt"));
+    }
+
+    [AvaloniaFact]
+    public async Task Copy_AFileThatIsGoneFromTheServer_ReportsIt()
+    {
+        using var dir = new TempDir();
+        var (service, _, _) = CreateWithServer();
+
+        var result = await service.CopyAsync([$"{Remote}/home/ana/vanished.txt"], dir.Path);
+
+        Assert.Equal(1, result.Failed);
+        Assert.Contains("vanished.txt", result.Errors[0].Message, StringComparison.Ordinal);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(dir.Path));
+    }
+
     // ---- audit regression: a whole drive is not a transfer source ----------------------------------------
 
     [AvaloniaFact]

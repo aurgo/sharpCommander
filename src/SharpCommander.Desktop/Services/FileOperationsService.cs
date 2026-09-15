@@ -194,26 +194,30 @@ public sealed partial class FileOperationsService : ObservableObject, IFileOpera
     /// <summary>
     /// Validates one source before anything is touched: it must exist, must not already be at the destination,
     /// and a directory must not be copied or moved into itself or one of its subfolders.
+    ///
+    /// A source or a destination on a server goes through exactly these checks, which is why the questions are
+    /// put to the file system service and the arithmetic to <see cref="AnyPath"/>: asking the local disk about a
+    /// remote address answered "no longer exists" for every file on it, so nothing could be downloaded.
     /// </summary>
-    private static WorkItem PlanTransfer(string source, string destinationDirectory, FileOperationKind kind)
+    private WorkItem PlanTransfer(string source, string destinationDirectory, FileOperationKind kind)
     {
         string sourcePath;
         string destinationPath;
         try
         {
-            sourcePath = PathUtils.NormalizeFullPath(source);
-            destinationPath = PathUtils.NormalizeFullPath(destinationDirectory);
+            sourcePath = AnyPath.Normalize(source);
+            destinationPath = AnyPath.Normalize(destinationDirectory);
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
         {
             return WorkItem.Invalid(source, ex.Message);
         }
 
-        var isDirectory = Directory.Exists(sourcePath);
-        var name = Path.GetFileName(sourcePath);
+        var isDirectory = _fileSystem.IsDirectory(sourcePath);
+        var name = AnyPath.GetName(sourcePath);
         var verb = kind == FileOperationKind.Copy ? "copy" : "move";
 
-        if (!isDirectory && !File.Exists(sourcePath))
+        if (!isDirectory && !_fileSystem.Exists(sourcePath))
         {
             return WorkItem.Invalid(sourcePath, $"'{name}' no longer exists.");
         }
@@ -222,18 +226,18 @@ public sealed partial class FileOperationsService : ObservableObject, IFileOpera
         // itself and the whole volume would be merged into it without so much as a prompt. Drives reach this
         // through F5/F6 and drag and drop from the Computer view, which (unlike delete and the clipboard) do not
         // filter them out.
-        if (PathUtils.IsVolumeRoot(sourcePath))
+        if (AnyPath.IsRoot(sourcePath))
         {
             return WorkItem.Invalid(sourcePath, $"Cannot {verb} a whole drive. Open it and select what to {verb}.");
         }
 
-        var target = Path.Combine(destinationPath, name);
-        if (PathUtils.AreSamePath(sourcePath, target))
+        var target = AnyPath.Combine(destinationPath, name);
+        if (AnyPath.AreSame(sourcePath, target))
         {
             return WorkItem.Invalid(sourcePath, $"Cannot {verb} '{name}': the source and the destination are the same.");
         }
 
-        if (isDirectory && PathUtils.IsSameOrDescendant(sourcePath, destinationPath))
+        if (isDirectory && AnyPath.IsSameOrDescendant(sourcePath, destinationPath))
         {
             return WorkItem.Invalid(sourcePath, $"Cannot {verb} '{name}' into itself.");
         }
@@ -242,7 +246,7 @@ public sealed partial class FileOperationsService : ObservableObject, IFileOpera
         {
             Path = sourcePath,
             IsDirectory = isDirectory,
-            MayConflict = File.Exists(target) || Directory.Exists(target)
+            MayConflict = _fileSystem.Exists(target)
         };
     }
 
@@ -398,7 +402,7 @@ public sealed partial class FileOperationsService : ObservableObject, IFileOpera
             return null;
         }
 
-        var directory = Path.GetDirectoryName(entry.FullPath);
+        var directory = AnyPath.GetDirectory(entry.FullPath);
         if (string.IsNullOrEmpty(directory))
         {
             await _dialogs.ShowErrorAsync("Rename", "A root folder cannot be renamed.");
@@ -418,8 +422,8 @@ public sealed partial class FileOperationsService : ObservableObject, IFileOpera
                 return null;
             }
 
-            var target = Path.Combine(directory, name);
-            return !PathUtils.AreSamePath(entry.FullPath, target) && _fileSystem.Exists(target)
+            var target = AnyPath.Combine(directory, name);
+            return !AnyPath.AreSame(entry.FullPath, target) && _fileSystem.Exists(target)
                 ? $"'{name}' already exists in this folder."
                 : null;
         }
@@ -433,7 +437,7 @@ public sealed partial class FileOperationsService : ObservableObject, IFileOpera
         try
         {
             await _fileSystem.RenameAsync(entry.FullPath, newName, cancellationToken);
-            return Path.Combine(directory, newName);
+            return AnyPath.Combine(directory, newName);
         }
         catch (OperationCanceledException)
         {
@@ -463,7 +467,7 @@ public sealed partial class FileOperationsService : ObservableObject, IFileOpera
                 return error;
             }
 
-            return _fileSystem.Exists(Path.Combine(parentDirectory, name)) ? $"'{name}' already exists." : null;
+            return _fileSystem.Exists(AnyPath.Combine(parentDirectory, name)) ? $"'{name}' already exists." : null;
         }
 
         var name = await _dialogs.ShowInputDialogAsync("New Folder", "Folder name:", SuggestFolderName(parentDirectory), Validate);
@@ -472,7 +476,7 @@ public sealed partial class FileOperationsService : ObservableObject, IFileOpera
             return null;
         }
 
-        var path = Path.Combine(parentDirectory, name);
+        var path = AnyPath.Combine(parentDirectory, name);
         try
         {
             await _fileSystem.CreateDirectoryAsync(path, cancellationToken);
@@ -615,8 +619,10 @@ public sealed partial class FileOperationsService : ObservableObject, IFileOpera
         try
         {
             // Both branches measure off the UI thread: a directory already does, and a file's length is a stat
-            // that costs a network round trip on a remote share.
-            return item.IsDirectory
+            // that costs a network round trip on a remote share. An entry on a server goes the same way as a
+            // folder whatever it is — only the server can answer for it, and FileInfo would be measuring a
+            // local path that does not exist.
+            return item.IsDirectory || AnyPath.IsRemote(item.Path)
                 ? await _fileSystem.GetDirectorySizeAsync(item.Path, null, cancellationToken)
                 : await Task.Run(() => new FileInfo(item.Path).Length, cancellationToken);
         }
@@ -624,8 +630,11 @@ public sealed partial class FileOperationsService : ObservableObject, IFileOpera
         {
             throw;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex)
         {
+            // Measuring only feeds the progress bar. Whatever the disk, the network or the server answers here,
+            // the batch itself still has to run.
+            AppLog.Warning($"The size of '{item.Path}' could not be measured.", ex);
             return 0;
         }
     }
@@ -706,6 +715,13 @@ public sealed partial class FileOperationsService : ObservableObject, IFileOpera
 
     private static string SuggestFolderName(string parentDirectory)
     {
+        if (AnyPath.IsRemote(parentDirectory))
+        {
+            // GetUniqueName counts the folders already on this disk, which says nothing about a server. The
+            // name typed is checked against the server itself when the dialog validates it.
+            return "New Folder";
+        }
+
         try
         {
             return PathUtils.GetUniqueName(parentDirectory, "New Folder");

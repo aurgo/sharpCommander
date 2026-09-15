@@ -198,8 +198,25 @@ public sealed class RoutingFileSystemService(IFileSystemService local, ISftpConn
         var entries = await _connections.Require(address).ListAsync(address.Path, cancellationToken);
 
         // The listing comes back with server paths; the panels need addresses they can navigate to.
-        return [.. entries.Select(entry => entry with { FullPath = address.With(entry.FullPath).ToString() })];
+        var listed = entries.Select(entry => entry with { FullPath = address.With(entry.FullPath).ToString() });
+
+        // A server never sends ".." — the session interface says as much and leaves it to whoever asked. Every
+        // other listing opens with one below a root, and a remote folder was the only one in the application
+        // with no way back up in the list itself.
+        return address.Parent() is { } parent ? [ParentEntry(parent), .. listed] : [.. listed];
     }
+
+    /// <summary>
+    /// The ".." row of a remote folder. It carries no date: that would be a stat of its own for a row nobody
+    /// reads the date of, and the modified column is left empty for entries whose date is unknown.
+    /// </summary>
+    private static FileSystemEntry ParentEntry(string parent) => new()
+    {
+        Name = "..",
+        FullPath = parent,
+        EntryType = FileSystemEntryType.ParentDirectory,
+        Attributes = FileAttributes.Directory
+    };
 
     /// <summary>
     /// One entry from one side to the other. Four combinations, and only the mixed ones need the bytes to travel:

@@ -226,6 +226,15 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     /// <summary>Copies the panel paths, favorites panel visibility and theme into the settings without saving.</summary>
     public void CaptureState()
     {
+        if (_disposed)
+        {
+            // The window is gone and its tab collections were emptied by Dispose. A save still runs after that
+            // — closing the last window raises ShutdownRequested once the window is already closed — and
+            // capturing from the emptied collections wrote an empty tab list over the session just saved, which
+            // is why every start came up with a single tab. What Dispose captured is what should be written.
+            return;
+        }
+
         var settings = _settingsService.Settings;
         settings.LastLeftPanelPath = LeftPanel.CurrentPath;
         settings.LastRightPanelPath = RightPanel.CurrentPath;
@@ -2003,6 +2012,17 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         if (_disposed)
         {
             return;
+        }
+
+        // The last look at the session while the panels and the tab collections still hold it: whatever saves
+        // after this point (a flush here, the shutdown save of the application lifetime) writes these values.
+        try
+        {
+            CaptureState();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("The session state could not be captured while closing.", ex);
         }
 
         _disposed = true;

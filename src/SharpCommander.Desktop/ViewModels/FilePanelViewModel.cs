@@ -366,14 +366,25 @@ public sealed partial class FilePanelViewModel : ObservableObject, IDisposable
         }
 
         string fullPath;
-        try
+        if (SftpAddress.TryParse(requested) is { } remote)
         {
-            fullPath = PathUtils.NormalizeFullPath(requested);
+            // A server address is already canonical and must never meet the local path rules: Path.GetFullPath
+            // reads "sftp://user@host:22/home" as a relative name and resolves it against the process's working
+            // directory, so every remote folder — the one a fresh connection lands in most of all — was reported
+            // as a path that does not exist.
+            fullPath = remote.ToString();
         }
-        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        else
         {
-            await ReportPathNotFoundAsync(requested);
-            return;
+            try
+            {
+                fullPath = PathUtils.NormalizeFullPath(requested);
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                await ReportPathNotFoundAsync(requested);
+                return;
+            }
         }
 
         if (_fileSystemService.IsDirectory(fullPath))

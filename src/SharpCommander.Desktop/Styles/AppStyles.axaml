@@ -2,10 +2,29 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <Styles.Resources>
-        <!-- Dialog accent colors (destructive actions and validation errors). -->
-        <SolidColorBrush x:Key="DangerBrush" Color="#DC3545" />
-        <SolidColorBrush x:Key="DangerHoverBrush" Color="#C82333" />
-        <SolidColorBrush x:Key="DangerPressedBrush" Color="#A71D2A" />
+        <ResourceDictionary>
+            <!-- Dialog accent colors (destructive actions and validation errors). -->
+            <SolidColorBrush x:Key="DangerBrush" Color="#DC3545" />
+            <SolidColorBrush x:Key="DangerHoverBrush" Color="#C82333" />
+            <SolidColorBrush x:Key="DangerPressedBrush" Color="#A71D2A" />
+
+            <ResourceDictionary.ThemeDictionaries>
+                <!--
+                    The selected row of the panel that is not active. Each one carries about as much weight as
+                    the accent selection of the active panel and no more: a grey brighter than the accent (which
+                    is what the stock "base medium low" is on a dark background) pulls the eye to the wrong panel.
+                -->
+                <ResourceDictionary x:Key="Default">
+                    <SolidColorBrush x:Key="InactivePanelSelectionBrush" Color="#C6C6C6" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="InactivePanelSelectionBrush" Color="#C6C6C6" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="InactivePanelSelectionBrush" Color="#3D3D3D" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
     </Styles.Resources>
     
     <!-- Panel Styles -->
@@ -65,6 +84,16 @@
     <Style Selector="ListBox.file-list.drop-target">
         <Setter Property="BorderBrush" Value="{DynamicResource SystemAccentColor}" />
         <Setter Property="Background" Value="{DynamicResource SystemControlHighlightListLowBrush}" />
+    </Style>
+
+    <!--
+        Only the active panel highlights its selection in the accent colour; the other one shows a grey one.
+        Both lists always have a selected row, so with one colour for both there was no way to tell which list
+        F5, F6 and the cursor keys were about to act on. The template part is what is set rather than the item's
+        own Background: the theme's own :selected style targets it too, and only the more specific one wins.
+    -->
+    <Style Selector="ListBox.file-list:not(.active) ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource InactivePanelSelectionBrush}" />
     </Style>
     
     <Style Selector="TextBlock.panel-title">
