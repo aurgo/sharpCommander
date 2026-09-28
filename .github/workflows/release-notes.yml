@@ -1,0 +1,52 @@
+# Copies .github/release-notes/<tag>.md into the text of that tag's GitHub release whenever the file changes
+# on master, so a published release can be reworded without publishing it again. It can also be run by hand
+# for one tag from the Actions tab.
+
+name: Release notes
+
+on:
+  push:
+    branches: [master]
+    paths: ['.github/release-notes/*.md']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, for example v2.3.0
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    name: Update release text
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Update the releases whose notes changed
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ -n "$TAG" ]; then
+            files=".github/release-notes/$TAG.md"
+          elif [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            files=$(ls .github/release-notes/*.md)
+          else
+            files=$(git diff --name-only --diff-filter=AM "$BEFORE" HEAD -- '.github/release-notes/*.md')
+          fi
+          for file in $files; do
+            tag=$(basename "$file" .md)
+            if gh release view "$tag" > /dev/null 2>&1; then
+              gh release edit "$tag" --notes-file "$file"
+              echo "Updated $tag from $file"
+            else
+              echo "No release $tag yet; its notes will be used when it is published."
+            fi
+          done
