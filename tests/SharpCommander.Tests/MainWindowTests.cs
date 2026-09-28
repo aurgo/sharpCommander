@@ -154,7 +154,9 @@ public class MainWindowTests
 
         harness.Dialogs.DeleteAnswer = DeleteChoice.Trash;
         Press(harness.Window, PhysicalKey.Delete);
-        await WaitUntilAsync(() => harness.Trash.Trashed.Count == 1);
+        // The listing is refreshed after the file is gone, so on a busy machine it can lag behind the trash.
+        await WaitUntilAsync(() => harness.Trash.Trashed.Count == 1
+                                   && harness.LeftPanel.FilteredEntries.All(entry => entry.Name != "a.txt"));
 
         Assert.Equal([file], harness.Trash.Trashed);
         Assert.False(File.Exists(file));

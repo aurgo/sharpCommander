@@ -14,7 +14,8 @@ public class EntryImagesTests
 
     /// <summary>
     /// The special folders that are a place of their own on this system. On Linux, .NET gives the home folder itself
-    /// as "Documents", and a folder that is the home folder is shown as home.
+    /// as "Documents", and a folder that is the home folder is shown as home; a folder that does not exist (a build
+    /// server has no Desktop) comes back empty and is left out.
     /// </summary>
     private static IEnumerable<(string Key, string Path)> DistinctSpecialFolders()
     {
@@ -35,6 +36,11 @@ public class EntryImagesTests
             }
         }
     }
+
+    /// <summary>One special folder to test with: the first of its own, or the home folder, which always exists.</summary>
+    private static (string Key, string Path) AnySpecialFolder() =>
+        DistinctSpecialFolders().Cast<(string Key, string Path)?>().FirstOrDefault()
+        ?? ("Home", Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
 
     private static FileSystemEntry Entry(string path, FileSystemEntryType type) => new()
     {
@@ -88,10 +94,8 @@ public class EntryImagesTests
     public void TheUsersOwnFoldersAreRecognisedInTheLists()
     {
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var folders = DistinctSpecialFolders().ToList();
-        Assert.NotEmpty(folders);
 
-        foreach (var (key, path) in folders)
+        foreach (var (key, path) in DistinctSpecialFolders())
         {
             Assert.Equal(key, EntryImages.SpecialFolderOf(path));
             Assert.Equal(key, EntryImages.SpecialFolderOf(path + Path.DirectorySeparatorChar));
@@ -104,7 +108,7 @@ public class EntryImagesTests
     [AvaloniaFact]
     public void OnlyFoldersAtThoseExactPlacesGetTheGlyph()
     {
-        var documents = DistinctSpecialFolders().First().Path;
+        var documents = AnySpecialFolder().Path;
 
         Assert.Null(EntryImages.SpecialFolderOf(Path.Combine(documents, "Documents")));
         Assert.Null(EntryImages.SpecialFolderOf("sftp://ana@example.com:22" + documents.Replace('\\', '/')));
@@ -118,7 +122,7 @@ public class EntryImagesTests
     public void TheConverterTakesAnEntryOrJustItsKind()
     {
         var converter = EntryImageConverter.Instance;
-        var (key, special) = DistinctSpecialFolders().First();
+        var (key, special) = AnySpecialFolder();
 
         Assert.Same(EntryImages.Drive, converter.Convert(FileSystemEntryType.Drive, typeof(IImage), null, System.Globalization.CultureInfo.InvariantCulture));
         Assert.Same(EntryImages.ForFolder(key), converter.Convert(Entry(special, FileSystemEntryType.Directory), typeof(IImage), null, System.Globalization.CultureInfo.InvariantCulture));
