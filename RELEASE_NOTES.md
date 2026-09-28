@@ -2,6 +2,78 @@
 
 ---
 
+# SharpCommander v2.3.0
+
+## 🚀 Resumen
+
+La 2.3.0 cambia la cara de la aplicación: la barra de botones da paso a una **cinta de comandos** con grupos, las carpetas y los archivos estrenan **iconos a color**, y **SpaceAnalyzer** queda integrado para ver de un vistazo qué ocupa espacio. Además, la aplicación **te avisa de las versiones nuevas** cada día y la **web** se ha rehecho en español e inglés.
+
+---
+
+## 🎀 Cinta de comandos
+
+- La barra de botones grises se sustituye por una cinta con los grupos **Abrir**, **Organizar**, **Paneles** y **Herramientas**: icono grande y etiqueta debajo, botones planos que se resaltan al pasar el ratón y separadores de verdad.
+- El color tiene significado: eliminar en rojo, la estrella de favoritos, la carpeta nueva y SpaceAnalyzer en su morado.
+- **Favoritos** se ve activo mientras el panel está abierto.
+- Cabe entera en la ventana más pequeña que se permite (800 px), en español y en inglés; hay una prueba que lo comprueba.
+
+## 📁 Iconos nuevos
+
+- Carpetas a dos tonos con degradado y hoja interior, documentos con la esquina doblada y unidades con su luz, dibujados sobre una rejilla de 16 puntos para verse nítidos en las listas.
+- Las carpetas que tiene todo usuario (Escritorio, Documentos, Descargas, Imágenes, Música, Vídeos y la carpeta personal) llevan su glifo, en los favoritos y también en las listas de archivos.
+
+## 📊 SpaceAnalyzer integrado
+
+- Botón **SpaceAnalyzer** en la cinta y *Herramientas → SpaceAnalyzer*: abre [SpaceAnalyzer](https://aurgo.github.io/SpaceAnalyzer/) sobre la carpeta del panel activo; desde la vista Equipo o un servidor se abre en su lista de unidades.
+- **La primera vez lo descarga** de su última versión en GitHub (la de tu sistema, unos 2 MB), comprueba el tamaño y el **SHA-256** publicados y lo guarda. Después se abre al instante, también sin conexión.
+- Una vez por semana, al usarlo, busca una versión nueva en segundo plano y la deja lista para la próxima vez, sin tocar la copia que está abierta.
+- Se guarda en `%LOCALAPPDATA%\SharpCommander\tools` (Windows), `~/Library/Application Support/SharpCommander/tools` (macOS) o `~/.local/share/SharpCommander/tools` (Linux).
+
+## 🔔 Aviso de versiones nuevas
+
+- Comprueba **una vez al día** (antes, una vez por semana), también con la ventana abierta días enteros.
+- Pregunta **una sola vez** por cada versión y deja un botón **Nueva versión** en la barra de menús que lleva a su página de descarga hasta que actualices.
+- *Ayuda → Comprobar automáticamente* sustituye a «Comprobar al iniciar».
+- **Corregido:** el botón **Abrir** del aviso daba un error en lugar de abrir la página de descarga en el navegador. La 2.2.0 todavía lo tiene: para pasar de la 2.2.0 a esta versión, descárgala desde la web o desde esta página.
+
+## 🌐 Web nueva
+
+- [aurgo.github.io/sharpCommander](https://aurgo.github.io/sharpCommander/), en español y en [inglés](https://aurgo.github.io/sharpCommander/en/): capturas reales de la aplicación, atajos de teclado, descargas por sistema y preguntas frecuentes.
+- Pensada para buscadores: páginas separadas por idioma con `hreflang`, datos estructurados (aplicación y preguntas frecuentes), Open Graph, mapa del sitio y `llms.txt`. Herramientas **WebMCP** para que un asistente en el navegador encuentre la descarga o los atajos.
+- Se genera con `dotnet run tools/SiteGen.cs` a partir de `site/index.html`, y las imágenes salen de la propia aplicación con `SC_SITE=1 dotnet test --filter GenerateSiteImages`.
+
+## 🛠️ Correcciones y mantenimiento
+
+- En Windows, una clave indicada como `~/.ssh/clave` ya no se muestra con separadores mezclados.
+- Pruebas: las clases se ejecutan una detrás de otra, porque al arrancar varias a la vez la plataforma sin ventana se quedaba a veces colgada. El CI falla en minutos si algo se cuelga, en lugar de esperar seis horas, y se han corregido dos pruebas que fallaban solo en Windows.
+- **541 pruebas automatizadas** (434 en la 2.2.0).
+
+---
+
+## 📥 Descargas
+
+| Plataforma | Archivo |
+|---|---|
+| Windows x64 | `SharpCommander-v2.3.0-win-x64.zip` |
+| Windows x86 | `SharpCommander-v2.3.0-win-x86.zip` |
+| Windows ARM64 | `SharpCommander-v2.3.0-win-arm64.zip` |
+| Linux x64 | `SharpCommander-v2.3.0-linux-x64.zip` |
+| Linux ARM64 | `SharpCommander-v2.3.0-linux-arm64.zip` |
+| macOS Intel | `SharpCommander-v2.3.0-osx-x64.zip` |
+| macOS Apple Silicon | `SharpCommander-v2.3.0-osx-arm64.zip` |
+
+Autocontenidos: no requieren .NET instalado.
+
+### macOS
+
+El ZIP contiene `SharpCommander.app` y un **`install.sh`**. La aplicación va firmada ad-hoc pero **sin notarizar**, así que macOS la pone en cuarentena al descargarla. Abre el Terminal en la carpeta extraída y ejecuta `./install.sh`: comprueba la firma, copia la aplicación a `/Applications` y quita la cuarentena. Si prefieres no usarlo, ábrela, deja que macOS la bloquee y pulsa **Abrir de todos modos** en *Ajustes del Sistema → Privacidad y seguridad*.
+
+### Windows
+
+SmartScreen puede avisar de que es un editor desconocido: *Más información → Ejecutar de todas formas*.
+
+---
+
 # SharpCommander v2.2.0
 
 ## 🚀 Resumen
