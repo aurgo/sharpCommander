@@ -13,7 +13,7 @@ public sealed class TempDir : IDisposable
 
     public string File(string relative, string content = "x")
     {
-        var full = System.IO.Path.Combine(Path, relative);
+        var full = Full(relative);
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(full)!);
         System.IO.File.WriteAllText(full, content);
         return full;
@@ -21,10 +21,17 @@ public sealed class TempDir : IDisposable
 
     public string Dir(string relative)
     {
-        var full = System.IO.Path.Combine(Path, relative);
+        var full = Full(relative);
         Directory.CreateDirectory(full);
         return full;
     }
+
+    /// <summary>
+    /// Tests write "left/target"; on Windows that would come back as "...\left/target" while the application,
+    /// rightly, reports "...\left\target", so the separators are made the platform's own.
+    /// </summary>
+    private string Full(string relative) =>
+        System.IO.Path.Combine(Path, relative.Replace('/', System.IO.Path.DirectorySeparatorChar));
 
     public void Dispose()
     {

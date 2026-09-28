@@ -12,6 +12,30 @@ public class EntryImagesTests
 {
     private static readonly string[] SpecialFolders = ["Desktop", "Documents", "Downloads", "Pictures", "Music", "Videos", "Home"];
 
+    /// <summary>
+    /// The special folders that are a place of their own on this system. On Linux, .NET gives the home folder itself
+    /// as "Documents", and a folder that is the home folder is shown as home.
+    /// </summary>
+    private static IEnumerable<(string Key, string Path)> DistinctSpecialFolders()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        foreach (var (key, folder) in new[]
+                 {
+                     ("Desktop", Environment.SpecialFolder.DesktopDirectory),
+                     ("Documents", Environment.SpecialFolder.MyDocuments),
+                     ("Pictures", Environment.SpecialFolder.MyPictures),
+                     ("Music", Environment.SpecialFolder.MyMusic),
+                     ("Videos", Environment.SpecialFolder.MyVideos)
+                 })
+        {
+            var path = Environment.GetFolderPath(folder);
+            if (path.Length > 0 && !string.Equals(Path.TrimEndingDirectorySeparator(path), Path.TrimEndingDirectorySeparator(home), StringComparison.Ordinal))
+            {
+                yield return (key, path);
+            }
+        }
+    }
+
     private static FileSystemEntry Entry(string path, FileSystemEntryType type) => new()
     {
         Name = Path.GetFileName(path),
@@ -63,19 +87,24 @@ public class EntryImagesTests
     [AvaloniaFact]
     public void TheUsersOwnFoldersAreRecognisedInTheLists()
     {
-        var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var folders = DistinctSpecialFolders().ToList();
+        Assert.NotEmpty(folders);
 
-        Assert.Equal("Documents", EntryImages.SpecialFolderOf(documents));
-        Assert.Equal("Documents", EntryImages.SpecialFolderOf(documents + Path.DirectorySeparatorChar));
+        foreach (var (key, path) in folders)
+        {
+            Assert.Equal(key, EntryImages.SpecialFolderOf(path));
+            Assert.Equal(key, EntryImages.SpecialFolderOf(path + Path.DirectorySeparatorChar));
+            Assert.Same(EntryImages.ForFolder(key), EntryImages.ForEntry(Entry(path, FileSystemEntryType.Directory)));
+        }
+
         Assert.Equal("Home", EntryImages.SpecialFolderOf(home));
-        Assert.Same(EntryImages.ForFolder("Documents"), EntryImages.ForEntry(Entry(documents, FileSystemEntryType.Directory)));
     }
 
     [AvaloniaFact]
     public void OnlyFoldersAtThoseExactPlacesGetTheGlyph()
     {
-        var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        var documents = DistinctSpecialFolders().First().Path;
 
         Assert.Null(EntryImages.SpecialFolderOf(Path.Combine(documents, "Documents")));
         Assert.Null(EntryImages.SpecialFolderOf("sftp://ana@example.com:22" + documents.Replace('\\', '/')));
@@ -89,10 +118,10 @@ public class EntryImagesTests
     public void TheConverterTakesAnEntryOrJustItsKind()
     {
         var converter = EntryImageConverter.Instance;
-        var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        var (key, special) = DistinctSpecialFolders().First();
 
         Assert.Same(EntryImages.Drive, converter.Convert(FileSystemEntryType.Drive, typeof(IImage), null, System.Globalization.CultureInfo.InvariantCulture));
-        Assert.Same(EntryImages.ForFolder("Documents"), converter.Convert(Entry(documents, FileSystemEntryType.Directory), typeof(IImage), null, System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Same(EntryImages.ForFolder(key), converter.Convert(Entry(special, FileSystemEntryType.Directory), typeof(IImage), null, System.Globalization.CultureInfo.InvariantCulture));
         Assert.Same(EntryImages.File, converter.Convert(null, typeof(IImage), null, System.Globalization.CultureInfo.InvariantCulture));
     }
 }
