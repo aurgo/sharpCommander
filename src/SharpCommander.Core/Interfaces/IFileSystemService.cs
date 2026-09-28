@@ -48,9 +48,10 @@ public interface IFileSystemService
     Task CreateDirectoryAsync(string path, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Opens a file with the default application, or a directory in the file manager. A file for which
-    /// <see cref="IsExecutableOrScript"/> is true is run (callers confirm first); any other file is handed to the
-    /// default application and is never executed, whatever its permission bits. Throws on failure.
+    /// Opens a file with the default application, a directory in the file manager, or an http(s) address in the
+    /// browser. A file for which <see cref="IsExecutableOrScript"/> is true is run (callers confirm first); any other
+    /// file is handed to the default application and is never executed, whatever its permission bits. Throws on
+    /// failure.
     /// </summary>
     Task OpenWithDefaultAsync(string path, CancellationToken cancellationToken = default);
 

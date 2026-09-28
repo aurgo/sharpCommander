@@ -14,6 +14,14 @@
     <PackageReference Include="Avalonia.Headless.XUnit" Version="11.3.20" />
     <PackageReference Include="Avalonia.Skia" Version="11.3.20" />
   </ItemGroup>
+  <!--
+    Test classes run one after another. When several start at once, Avalonia's headless platform now and then sets
+    up the first windows without their fonts ("fonts:SystemFonts" was not present in the dictionary) and the whole
+    run hangs; running them in turn costs about ten seconds and removes it.
+  -->
+  <ItemGroup>
+    <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\SharpCommander.Core\SharpCommander.Core.csproj" />
     <ProjectReference Include="..\..\src\SharpCommander.Desktop\SharpCommander.Desktop.csproj" />

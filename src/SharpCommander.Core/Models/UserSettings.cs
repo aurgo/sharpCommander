@@ -48,13 +48,19 @@ public sealed class UserSettings
     public string Language { get; set; } = "System";
 
     /// <summary>
-    /// Whether to look for a new release on startup. It contacts github.com, so it is a setting rather than a
-    /// given; the Help menu can always check on demand.
+    /// Whether to look for new releases automatically, at startup and once a day while the window is open. It
+    /// contacts github.com, so it is a setting rather than a given; the Help menu can always check on demand.
     /// </summary>
     public bool CheckForUpdates { get; set; } = true;
 
-    /// <summary>When the last automatic check ran, so startup asks at most once a day.</summary>
+    /// <summary>When the last automatic check ran, so it asks at most once a day.</summary>
     public DateTime? LastUpdateCheck { get; set; }
+
+    /// <summary>The release (its tag) the automatic check last asked about, so each release is only asked about once.</summary>
+    public string? LastAnnouncedUpdate { get; set; }
+
+    /// <summary>When a newer SpaceAnalyzer was last looked for, so opening it asks GitHub at most once a week.</summary>
+    public DateTime? LastSpaceAnalyzerCheck { get; set; }
 
     /// <summary>
     /// Gets or sets whether hidden entries (Hidden attribute, dotfiles on Unix) are listed.

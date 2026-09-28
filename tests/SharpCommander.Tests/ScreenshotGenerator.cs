@@ -36,6 +36,10 @@ public class ScreenshotGenerator(ITestOutputHelper output)
 
         var settings = new FakeSettingsService();
         settings.Settings.Theme = "Dark";
+
+        // The README is in English: the language of the machine that renders it must not decide the picture.
+        var language = SharpCommander.Desktop.Localization.Strings.CurrentLanguage;
+        settings.Settings.Language = "en";
         settings.Settings.LastLeftPanelPath = projects;
         settings.Settings.LastRightPanelPath = photos;
         await settings.AddFavoriteAsync(projects, "Projects");
@@ -45,7 +49,7 @@ public class ScreenshotGenerator(ITestOutputHelper output)
         var dialogs = new FakeDialogService();
         var trash = new FakeTrashService();
         var operations = new FileOperationsService(fileSystem, dialogs, trash);
-        using var viewModel = new MainWindowViewModel(fileSystem, settings, dialogs, new FakeClipboardService(), operations, trash, new ThemeService(), new CompositeArchiveService(new ZipArchiveService(), new TarArchiveService()), new DirectoryComparer(), new UndoService(), new SftpConnections(), new FakeUpdateService());
+        using var viewModel = new MainWindowViewModel(fileSystem, settings, dialogs, new FakeClipboardService(), operations, trash, new ThemeService(), new CompositeArchiveService(new ZipArchiveService(), new TarArchiveService()), new DirectoryComparer(), new UndoService(), new SftpConnections(), new FakeUpdateService(), new FakeSpaceAnalyzerService());
         var window = new MainWindow { DataContext = viewModel, Width = Width, Height = Height };
 
         try
@@ -73,6 +77,7 @@ public class ScreenshotGenerator(ITestOutputHelper output)
         finally
         {
             window.Close();
+            SharpCommander.Desktop.Localization.Strings.Use(language);
         }
     }
 

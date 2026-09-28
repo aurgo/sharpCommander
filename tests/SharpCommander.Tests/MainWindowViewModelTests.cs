@@ -24,12 +24,13 @@ public class MainWindowViewModelTests
         public FakeClipboardService Clipboard { get; } = new();
         public FakeTrashService Trash { get; } = new();
         public FakeUpdateService Updates { get; } = new();
+        public FakeSpaceAnalyzerService SpaceAnalyzer { get; } = new();
         public MainWindowViewModel ViewModel { get; }
 
         public Harness()
         {
             var operations = new FileOperationsService(FileSystem, Dialogs, Trash);
-            ViewModel = new MainWindowViewModel(FileSystem, Settings, Dialogs, Clipboard, operations, Trash, new ThemeService(), new CompositeArchiveService(new ZipArchiveService(), new TarArchiveService()), new DirectoryComparer(), new UndoService(), new SftpConnections(), Updates);
+            ViewModel = new MainWindowViewModel(FileSystem, Settings, Dialogs, Clipboard, operations, Trash, new ThemeService(), new CompositeArchiveService(new ZipArchiveService(), new TarArchiveService()), new DirectoryComparer(), new UndoService(), new SftpConnections(), Updates, SpaceAnalyzer);
         }
 
         public void Dispose() => ViewModel.Dispose();
@@ -852,7 +853,7 @@ public class MainWindowViewModelTests
         dir.File("a.txt");
         var dialogs = new FakeDialogService();
         var trash = new FakeTrashService();
-        using var vm = new MainWindowViewModel(FileSystem, new FakeSettingsService(), dialogs, new ThrowingClipboard(), new FileOperationsService(FileSystem, dialogs, trash), trash, new ThemeService(), new CompositeArchiveService(new ZipArchiveService(), new TarArchiveService()), new DirectoryComparer(), new UndoService(), new SftpConnections(), new FakeUpdateService());
+        using var vm = new MainWindowViewModel(FileSystem, new FakeSettingsService(), dialogs, new ThrowingClipboard(), new FileOperationsService(FileSystem, dialogs, trash), trash, new ThemeService(), new CompositeArchiveService(new ZipArchiveService(), new TarArchiveService()), new DirectoryComparer(), new UndoService(), new SftpConnections(), new FakeUpdateService(), new FakeSpaceAnalyzerService());
         await GoAsync(vm, dir.Path, dir.Path);
         vm.SetActivePanel(vm.LeftPanel);
         Select(vm.LeftPanel, "a.txt");
@@ -1392,19 +1393,19 @@ public class MainWindowViewModelTests
     [Theory]
     [InlineData(null, true)]
     [InlineData(0, false)]
-    [InlineData(3, false)]
-    [InlineData(6, false)]
-    [InlineData(7, true)]
-    [InlineData(30, true)]
-    public void DueForCheck_RunsAtMostOnceAWeek(int? daysAgo, bool expected)
+    [InlineData(12, false)]
+    [InlineData(23, false)]
+    [InlineData(24, true)]
+    [InlineData(24 * 30, true)]
+    public void DueForCheck_OnceTheIntervalHasPassed(int? hoursAgo, bool expected)
     {
-        var last = daysAgo is { } days ? DateTime.UtcNow.AddDays(-days) : (DateTime?)null;
+        var last = hoursAgo is { } hours ? DateTime.UtcNow.AddHours(-hours) : (DateTime?)null;
 
-        Assert.Equal(expected, MainWindowViewModel.DueForCheck(last));
+        Assert.Equal(expected, MainWindowViewModel.DueForCheck(last, TimeSpan.FromDays(1)));
     }
 
     [AvaloniaFact]
-    public async Task Startup_ChecksForUpdatesWhenTheSettingIsOnAndTheWeekIsUp()
+    public async Task Startup_ChecksForUpdatesWhenTheSettingIsOnAndTheDayIsUp()
     {
         using var harness = new Harness();
         harness.Settings.Settings.CheckForUpdates = true;
@@ -1430,11 +1431,11 @@ public class MainWindowViewModelTests
     }
 
     [AvaloniaFact]
-    public async Task Startup_DoesNotCheckAgainWithinTheWeek()
+    public async Task Startup_DoesNotCheckAgainWithinTheDay()
     {
         using var harness = new Harness();
         harness.Settings.Settings.CheckForUpdates = true;
-        harness.Settings.Settings.LastUpdateCheck = DateTime.UtcNow.AddDays(-2);
+        harness.Settings.Settings.LastUpdateCheck = DateTime.UtcNow.AddHours(-2);
 
         await harness.ViewModel.InitializeAsync();
         await Task.Delay(200);
@@ -1521,5 +1522,295 @@ public class MainWindowViewModelTests
 
         // Nobody asked, so a failed check must not interrupt with a dialog.
         Assert.Empty(harness.Dialogs.Messages);
+    }
+
+    private static UpdateInfo NewerRelease() => new()
+    {
+        Version = new Version(99, 1, 0),
+        Tag = "v99.1.0",
+        Url = "https://github.com/aurgo/sharpCommander/releases/tag/v99.1.0",
+        IsNewer = true
+    };
+
+    [AvaloniaFact]
+    public async Task AReleasePutOffWithLaterStaysOnScreen()
+    {
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        harness.Updates.Answer = NewerRelease();
+        harness.Dialogs.ConfirmAnswer = false;
+
+        await vm.CheckForUpdatesNowCommand.ExecuteAsync(null);
+
+        // The dialog is gone, but the menu bar keeps the reminder.
+        Assert.Same(harness.Updates.Answer, vm.AvailableUpdate);
+        Assert.Equal("99.1.0", vm.AvailableVersion);
+    }
+
+    [AvaloniaFact]
+    public async Task TheAutomaticCheckAsksAboutEachReleaseOnlyOnce()
+    {
+        using var harness = new Harness();
+        harness.Settings.Settings.CheckForUpdates = true;
+        harness.Settings.Settings.LastUpdateCheck = null;
+        harness.Settings.Settings.LastAnnouncedUpdate = "v99.1.0";
+        harness.Updates.Answer = NewerRelease();
+
+        await harness.ViewModel.InitializeAsync();
+        await WaitUntilAsync(() => harness.ViewModel.AvailableUpdate is not null, 2000);
+
+        // Asked about already: a check a day must not put the same question every morning.
+        Assert.DoesNotContain(harness.Dialogs.Calls, call => call.StartsWith("confirm", StringComparison.Ordinal));
+        Assert.NotNull(harness.ViewModel.AvailableUpdate);
+    }
+
+    [AvaloniaFact]
+    public async Task TheAutomaticCheckAsksAboutANewReleaseAndRemembersIt()
+    {
+        using var harness = new Harness();
+        harness.Settings.Settings.CheckForUpdates = true;
+        harness.Settings.Settings.LastUpdateCheck = null;
+        harness.Settings.Settings.LastAnnouncedUpdate = "v99.0.0";
+        harness.Updates.Answer = NewerRelease();
+        harness.Dialogs.ConfirmAnswer = false;
+
+        await harness.ViewModel.InitializeAsync();
+        await WaitUntilAsync(() => harness.Dialogs.Calls.Any(call => call.StartsWith("confirm", StringComparison.Ordinal)), 2000);
+
+        Assert.Equal("v99.1.0", harness.Settings.Settings.LastAnnouncedUpdate);
+    }
+
+    [AvaloniaFact]
+    public async Task BeingUpToDateClearsTheReminder()
+    {
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        harness.Updates.Answer = NewerRelease();
+        harness.Dialogs.ConfirmAnswer = false;
+        await vm.CheckForUpdatesNowCommand.ExecuteAsync(null);
+
+        harness.Updates.Answer = NewerRelease() with { IsNewer = false };
+        await vm.CheckForUpdatesNowCommand.ExecuteAsync(null);
+
+        Assert.Null(vm.AvailableUpdate);
+    }
+
+    [AvaloniaFact]
+    public async Task OpeningTheUpdateGoesToItsDownloadPage()
+    {
+        var fileSystem = new DelegatingFileSystem(FileSystem);
+        var dialogs = new FakeDialogService { ConfirmAnswer = true };
+        var trash = new FakeTrashService();
+        var updates = new FakeUpdateService { Answer = NewerRelease() };
+        using var vm = new MainWindowViewModel(fileSystem, new FakeSettingsService(), dialogs, new FakeClipboardService(), new FileOperationsService(fileSystem, dialogs, trash), trash, new ThemeService(), new CompositeArchiveService(new ZipArchiveService(), new TarArchiveService()), new DirectoryComparer(), new UndoService(), new SftpConnections(), updates, new FakeSpaceAnalyzerService());
+
+        // Once from the dialog's "Open", once from the reminder in the menu bar.
+        await vm.CheckForUpdatesNowCommand.ExecuteAsync(null);
+        await vm.OpenUpdatePageCommand.ExecuteAsync(null);
+
+        Assert.Equal([updates.Answer.Url, updates.Answer.Url], fileSystem.Opened);
+        Assert.Empty(dialogs.ErrorMessages);
+    }
+
+    [AvaloniaFact]
+    public async Task AnOpenWindowKeepsCheckingOnceADay()
+    {
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        vm.UpdateWatchInterval = TimeSpan.FromMilliseconds(50);
+        harness.Settings.Settings.CheckForUpdates = true;
+        harness.Settings.Settings.LastUpdateCheck = DateTime.UtcNow;
+
+        await vm.InitializeAsync();
+        await WaitUntilAsync(() => false, 300);
+        Assert.Equal(0, harness.Updates.Checks);
+
+        // A day goes by with the window open.
+        harness.Settings.Settings.LastUpdateCheck = DateTime.UtcNow.AddDays(-1).AddMinutes(-1);
+        await WaitUntilAsync(() => harness.Updates.Checks > 0, 2000);
+
+        Assert.Equal(1, harness.Updates.Checks);
+    }
+
+    // ---- SpaceAnalyzer --------------------------------------------------------------------------------------
+
+    [AvaloniaFact]
+    public async Task SpaceAnalyzer_TheFirstUseDownloadsItAndOpensItOnTheActiveFolder()
+    {
+        using var harness = new Harness();
+        using var dir = new TempDir();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, dir.Dir("left"), dir.Dir("right"));
+        vm.SetActivePanel(vm.RightPanel);
+        harness.SpaceAnalyzer.Latest = FakeSpaceAnalyzerService.Release("1.2.0");
+
+        await vm.OpenSpaceAnalyzerCommand.ExecuteAsync(null);
+
+        Assert.Equal(new Version(1, 2, 0), Assert.Single(harness.SpaceAnalyzer.Installs).Version);
+        var launch = Assert.Single(harness.SpaceAnalyzer.Launches);
+        Assert.Equal(new Version(1, 2, 0), launch.Install.Version);
+        Assert.Equal(vm.RightPanel.CurrentPath, launch.Folder);
+        Assert.NotNull(harness.Settings.Settings.LastSpaceAnalyzerCheck);
+        Assert.Empty(harness.Dialogs.Calls);
+
+        // Progress reports still queued when the download ended must not paint a percentage over the result.
+        await WaitUntilAsync(() => false, 150);
+        Assert.Contains(vm.RightPanel.CurrentPath, vm.StatusMessage, StringComparison.Ordinal);
+    }
+
+    [AvaloniaFact]
+    public async Task SpaceAnalyzer_AKeptCopyOpensWithoutAskingGitHub()
+    {
+        using var harness = new Harness();
+        using var dir = new TempDir();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, dir.Dir("left"), dir.Dir("right"));
+        vm.SetActivePanel(vm.LeftPanel);
+        var kept = FakeSpaceAnalyzerService.Install("1.0.0");
+        harness.SpaceAnalyzer.Installed = kept;
+        harness.Settings.Settings.LastSpaceAnalyzerCheck = DateTime.UtcNow.AddDays(-1);
+
+        await vm.OpenSpaceAnalyzerCommand.ExecuteAsync(null);
+        await WaitUntilAsync(() => false, 100);
+
+        Assert.Equal(0, harness.SpaceAnalyzer.Lookups);
+        Assert.Empty(harness.SpaceAnalyzer.Installs);
+        var launch = Assert.Single(harness.SpaceAnalyzer.Launches);
+        Assert.Same(kept, launch.Install);
+        Assert.Equal(vm.LeftPanel.CurrentPath, launch.Folder);
+    }
+
+    [AvaloniaFact]
+    public async Task SpaceAnalyzer_OnceAWeekANewerReleaseIsFetchedForTheNextTime()
+    {
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        var kept = FakeSpaceAnalyzerService.Install("1.0.0");
+        harness.SpaceAnalyzer.Installed = kept;
+        harness.SpaceAnalyzer.Latest = FakeSpaceAnalyzerService.Release("1.1.0");
+        harness.Settings.Settings.LastSpaceAnalyzerCheck = DateTime.UtcNow.AddDays(-8);
+
+        await vm.OpenSpaceAnalyzerCommand.ExecuteAsync(null);
+        await WaitUntilAsync(() => harness.SpaceAnalyzer.Installs.Count > 0, 2000);
+
+        // The copy already kept is the one that opened; the new one only takes over from the next time on.
+        Assert.Same(kept, Assert.Single(harness.SpaceAnalyzer.Launches).Install);
+        Assert.Equal(new Version(1, 1, 0), Assert.Single(harness.SpaceAnalyzer.Installs).Version);
+        Assert.True(DateTime.UtcNow - harness.Settings.Settings.LastSpaceAnalyzerCheck < TimeSpan.FromMinutes(1));
+        Assert.Contains("1.1.0", vm.StatusMessage, StringComparison.Ordinal);
+
+        // Nobody asked for the check, so it never interrupts with a dialog.
+        Assert.Empty(harness.Dialogs.Calls);
+    }
+
+    [AvaloniaFact]
+    public async Task SpaceAnalyzer_TheWeeklyCheckKeepsTheCopyWhenNothingIsNewer()
+    {
+        using var harness = new Harness();
+        harness.SpaceAnalyzer.Installed = FakeSpaceAnalyzerService.Install("1.1.0");
+        harness.SpaceAnalyzer.Latest = FakeSpaceAnalyzerService.Release("1.1.0");
+        harness.Settings.Settings.LastSpaceAnalyzerCheck = DateTime.UtcNow.AddDays(-8);
+
+        await harness.ViewModel.OpenSpaceAnalyzerCommand.ExecuteAsync(null);
+        await WaitUntilAsync(() => harness.SpaceAnalyzer.Lookups > 0, 2000);
+
+        Assert.Empty(harness.SpaceAnalyzer.Installs);
+        Assert.Single(harness.SpaceAnalyzer.Launches);
+    }
+
+    [AvaloniaFact]
+    public async Task SpaceAnalyzer_AFailedWeeklyCheckStaysQuiet()
+    {
+        using var harness = new Harness();
+        harness.SpaceAnalyzer.Installed = FakeSpaceAnalyzerService.Install("1.0.0");
+        harness.SpaceAnalyzer.Latest = FakeSpaceAnalyzerService.Release("1.1.0");
+        harness.SpaceAnalyzer.InstallFailure = new HttpRequestException("no network");
+        harness.Settings.Settings.LastSpaceAnalyzerCheck = null;
+
+        await harness.ViewModel.OpenSpaceAnalyzerCommand.ExecuteAsync(null);
+        await WaitUntilAsync(() => harness.SpaceAnalyzer.Installs.Count > 0, 2000);
+
+        Assert.Single(harness.SpaceAnalyzer.Launches);
+        Assert.Empty(harness.Dialogs.Calls);
+    }
+
+    [AvaloniaFact]
+    public async Task SpaceAnalyzer_WhenGitHubCannotBeReachedTheFirstTimeItSaysSo()
+    {
+        using var harness = new Harness();
+        harness.SpaceAnalyzer.Latest = null;
+
+        await harness.ViewModel.OpenSpaceAnalyzerCommand.ExecuteAsync(null);
+
+        Assert.Empty(harness.SpaceAnalyzer.Installs);
+        Assert.Empty(harness.SpaceAnalyzer.Launches);
+        Assert.StartsWith("SpaceAnalyzer|", Assert.Single(harness.Dialogs.Messages), StringComparison.Ordinal);
+    }
+
+    [AvaloniaFact]
+    public async Task SpaceAnalyzer_AFailedDownloadIsReportedAndNothingOpens()
+    {
+        using var harness = new Harness();
+        harness.SpaceAnalyzer.Latest = FakeSpaceAnalyzerService.Release("1.2.0");
+        harness.SpaceAnalyzer.InstallFailure = new InvalidDataException("does not match the SHA-256");
+
+        await harness.ViewModel.OpenSpaceAnalyzerCommand.ExecuteAsync(null);
+
+        Assert.Empty(harness.SpaceAnalyzer.Launches);
+        Assert.Contains("does not match the SHA-256", Assert.Single(harness.Dialogs.ErrorMessages), StringComparison.Ordinal);
+    }
+
+    [AvaloniaFact]
+    public async Task SpaceAnalyzer_ASystemWithoutABuildIsToldSo()
+    {
+        using var harness = new Harness();
+        harness.SpaceAnalyzer.IsSupported = false;
+
+        await harness.ViewModel.OpenSpaceAnalyzerCommand.ExecuteAsync(null);
+
+        Assert.Equal(0, harness.SpaceAnalyzer.Lookups);
+        Assert.Empty(harness.SpaceAnalyzer.Launches);
+        Assert.Single(harness.Dialogs.Messages);
+    }
+
+    [AvaloniaFact]
+    public async Task SpaceAnalyzer_OnTheComputerViewOpensOnItsStartScreen()
+    {
+        using var harness = new Harness();
+        var vm = harness.ViewModel;
+        harness.SpaceAnalyzer.Installed = FakeSpaceAnalyzerService.Install("1.0.0");
+        harness.Settings.Settings.LastSpaceAnalyzerCheck = DateTime.UtcNow;
+        await vm.LeftPanel.InitializeAsync(string.Empty);
+        vm.SetActivePanel(vm.LeftPanel);
+        Assert.True(vm.LeftPanel.IsRootView);
+
+        await vm.OpenSpaceAnalyzerCommand.ExecuteAsync(null);
+
+        // Its start screen lists the drives, which is what the Computer view shows too.
+        Assert.Null(Assert.Single(harness.SpaceAnalyzer.Launches).Folder);
+    }
+
+    [AvaloniaFact]
+    public async Task SpaceAnalyzer_OnAServerOpensOnItsStartScreen()
+    {
+        var server = new FakeSftpServer();
+        server.AddDirectory("/home/ana");
+        var connections = new SftpConnections(() => server);
+        await connections.ConnectAsync(new SftpSite { Host = "example.com", Port = 22, Username = "ana" }, null);
+        var fileSystem = new RoutingFileSystemService(FileSystem, connections);
+        var dialogs = new FakeDialogService();
+        var trash = new FakeTrashService();
+        var settings = new FakeSettingsService();
+        settings.Settings.LastSpaceAnalyzerCheck = DateTime.UtcNow;
+        var spaceAnalyzer = new FakeSpaceAnalyzerService { Installed = FakeSpaceAnalyzerService.Install("1.0.0") };
+        using var vm = new MainWindowViewModel(fileSystem, settings, dialogs, new FakeClipboardService(), new FileOperationsService(fileSystem, dialogs, trash), trash, new ThemeService(), new CompositeArchiveService(new ZipArchiveService(), new TarArchiveService()), new DirectoryComparer(), new UndoService(), connections, new FakeUpdateService(), spaceAnalyzer);
+        await vm.LeftPanel.NavigateToAsync("sftp://ana@example.com:22/home/ana");
+        vm.SetActivePanel(vm.LeftPanel);
+
+        await vm.OpenSpaceAnalyzerCommand.ExecuteAsync(null);
+
+        // A remote folder cannot be scanned from here; the start screen is the honest place to land.
+        Assert.Null(Assert.Single(spaceAnalyzer.Launches).Folder);
+        Assert.DoesNotContain("sftp://", vm.StatusMessage, StringComparison.Ordinal);
     }
 }

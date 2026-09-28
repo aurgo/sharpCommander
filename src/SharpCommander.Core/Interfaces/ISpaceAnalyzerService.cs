@@ -28,6 +28,9 @@ public interface ISpaceAnalyzerService
     /// </summary>
     Task<SpaceAnalyzerInstall> InstallAsync(SpaceAnalyzerRelease release, IProgress<double>? progress = null, CancellationToken cancellationToken = default);
 
-    /// <summary>Starts a kept copy on <paramref name="folder"/>, or on its start screen when that is null.</summary>
-    void Launch(SpaceAnalyzerInstall install, string? folder);
+    /// <summary>
+    /// Starts a kept copy on <paramref name="folder"/>, or on its start screen when that is null. Throws when the
+    /// system refuses to start it.
+    /// </summary>
+    Task LaunchAsync(SpaceAnalyzerInstall install, string? folder);
 }

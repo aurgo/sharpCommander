@@ -48,7 +48,7 @@
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="models:FileSystemEntry">
                         <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                            <PathIcon Grid.Column="0" Width="16" Height="16" Data="{Binding EntryType, Converter={x:Static util:EntryIconConverter.Instance}}" />
+                            <Image Grid.Column="0" Width="16" Height="16" Source="{Binding Converter={x:Static util:EntryImageConverter.Instance}}" />
                             <StackPanel Grid.Column="1">
                                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
                                 <TextBlock Text="{Binding FullPath}" Classes="dialog-secondary" TextTrimming="CharacterEllipsis" />

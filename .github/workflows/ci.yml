@@ -25,6 +25,8 @@ jobs:
   build-test:
     name: Build and test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # A hung run used to sit until GitHub's six-hour limit; the whole job takes a few minutes.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -43,13 +45,15 @@ jobs:
         run: dotnet build SharpCommander.sln -c Release --no-restore
 
       - name: Test
-        run: dotnet test SharpCommander.sln -c Release --no-build
+        # If a test ever hangs, fail within minutes and name the tests that were running.
+        run: dotnet test SharpCommander.sln -c Release --no-build --blame-hang --blame-hang-timeout 5m
 
   publish:
     name: Publish (${{ matrix.rid }})
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build-test
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:

@@ -35,6 +35,8 @@ public class MainWindowTests
         public FakeDialogService Dialogs { get; } = new();
         public FakeClipboardService Clipboard { get; } = new();
         public FakeTrashService Trash { get; } = new();
+        public FakeSpaceAnalyzerService SpaceAnalyzer { get; } = new();
+        public FakeUpdateService Updates { get; } = new();
         public MainWindowViewModel ViewModel { get; }
         public MainWindow Window { get; }
 
@@ -47,7 +49,7 @@ public class MainWindowTests
             Settings.Settings.LastRightPanelPath = Right;
 
             var operations = new FileOperationsService(fs, Dialogs, Trash);
-            ViewModel = new MainWindowViewModel(fs, Settings, Dialogs, Clipboard, operations, Trash, new ThemeService(), new CompositeArchiveService(new ZipArchiveService(), new TarArchiveService()), new DirectoryComparer(), new UndoService(), new SftpConnections(), new FakeUpdateService());
+            ViewModel = new MainWindowViewModel(fs, Settings, Dialogs, Clipboard, operations, Trash, new ThemeService(), new CompositeArchiveService(new ZipArchiveService(), new TarArchiveService()), new DirectoryComparer(), new UndoService(), new SftpConnections(), Updates, SpaceAnalyzer);
             Window = new MainWindow { DataContext = ViewModel };
         }
 
@@ -781,5 +783,106 @@ public class MainWindowTests
         {
             SharpCommander.Desktop.Localization.Strings.Use("en");
         }
+    }
+
+    // ---- ribbon ---------------------------------------------------------------------------------------------
+
+    [AvaloniaFact]
+    public async Task TheSpaceAnalyzerButton_OpensItOnTheActivePanesFolder()
+    {
+        using var harness = new Harness();
+        harness.SpaceAnalyzer.Installed = FakeSpaceAnalyzerService.Install("1.0.0");
+        harness.Settings.Settings.LastSpaceAnalyzerCheck = DateTime.UtcNow;
+        await harness.ShowAsync();
+
+        Click(harness.Window, harness.Window.FindControl<Button>("SpaceAnalyzerButton")!);
+        await WaitUntilAsync(() => harness.SpaceAnalyzer.Launches.Count > 0);
+
+        Assert.Equal(harness.LeftPanel.CurrentPath, Assert.Single(harness.SpaceAnalyzer.Launches).Folder);
+    }
+
+    /// <summary>
+    /// Every command of the ribbon is visible at the smallest size the window allows, in every language: the
+    /// labels change width with the language, and a button cut off at the edge is one nobody can find.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task TheRibbon_FitsTheSmallestWindowInEveryLanguage()
+    {
+        using var harness = new Harness();
+        harness.Window.Width = harness.Window.MinWidth;
+        await harness.ShowAsync();
+
+        try
+        {
+            foreach (var language in new[] { "en", "es" })
+            {
+                harness.ViewModel.SetLanguageCommand.Execute(language);
+                await PumpAsync();
+                harness.Window.UpdateLayout();
+
+                var ribbon = harness.Window.FindControl<StackPanel>("Ribbon")!;
+                var buttons = ribbon.GetVisualDescendants().OfType<Button>().ToList();
+                Assert.Equal(10, buttons.Count);
+
+                foreach (var button in buttons)
+                {
+                    var right = button.TranslatePoint(new Point(button.Bounds.Width, 0), ribbon)!.Value.X;
+                    Assert.True(right <= ribbon.Bounds.Width,
+                        $"In '{language}' a ribbon button ends at {right:0}, past the {ribbon.Bounds.Width:0} of the ribbon.");
+                }
+            }
+        }
+        finally
+        {
+            SharpCommander.Desktop.Localization.Strings.Use("en");
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task TheFavoritesButton_ShowsWhetherThePanelIsOpen()
+    {
+        using var harness = new Harness();
+        await harness.ShowAsync();
+        var button = harness.Window.FindControl<StackPanel>("Ribbon")!
+            .GetVisualDescendants().OfType<Button>()
+            .Single(candidate => candidate.Command == harness.ViewModel.ToggleFavoritesPanelCommand);
+        Assert.True(harness.ViewModel.ShowFavoritesPanel);
+        Assert.Contains("checked", button.Classes);
+
+        Click(harness.Window, button);
+        await PumpAsync();
+
+        Assert.False(harness.ViewModel.ShowFavoritesPanel);
+        Assert.DoesNotContain("checked", button.Classes);
+    }
+
+    [AvaloniaFact]
+    public async Task TheNewVersionButton_AppearsOnlyWithANewerReleaseAndOpensItsPage()
+    {
+        var fileSystem = new DelegatingFileSystem(FileSystem);
+        using var harness = new Harness(fileSystem);
+        harness.Settings.Settings.CheckForUpdates = false;
+        await harness.ShowAsync();
+        var button = harness.Window.FindControl<Button>("UpdateButton")!;
+        Assert.False(button.IsVisible);
+
+        harness.Updates.Answer = new UpdateInfo
+        {
+            Version = new Version(99, 1, 0),
+            Tag = "v99.1.0",
+            Url = "https://github.com/aurgo/sharpCommander/releases/tag/v99.1.0",
+            IsNewer = true
+        };
+        harness.Dialogs.ConfirmAnswer = false;
+        await harness.ViewModel.CheckForUpdatesNowCommand.ExecuteAsync(null);
+        await PumpAsync();
+
+        Assert.True(button.IsEffectivelyVisible);
+        Assert.Contains("99.1.0", string.Concat(button.GetVisualDescendants().OfType<TextBlock>().Select(text => text.Inlines?.Text ?? text.Text)), StringComparison.Ordinal);
+
+        Click(harness.Window, button);
+        await WaitUntilAsync(() => fileSystem.Opened.Count > 0);
+
+        Assert.Equal(["https://github.com/aurgo/sharpCommander/releases/tag/v99.1.0"], fileSystem.Opened);
     }
 }

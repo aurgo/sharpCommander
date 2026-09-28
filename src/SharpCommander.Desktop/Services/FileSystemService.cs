@@ -79,7 +79,7 @@ public sealed class FileSystemService : IFileSystemService
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
 
-        if (!File.Exists(path) && !Directory.Exists(path))
+        if (!IsWebAddress(path) && !File.Exists(path) && !Directory.Exists(path))
         {
             throw new FileNotFoundException("The specified path does not exist.", path);
         }
@@ -91,14 +91,23 @@ public sealed class FileSystemService : IFileSystemService
     }
 
     /// <summary>
+    /// True for an http or https address, such as the download page of a new release, which goes to the browser.
+    /// Nothing else counts: on Unix "/home/ana/notes.txt" also parses as an absolute URI, of the file scheme.
+    /// </summary>
+    internal static bool IsWebAddress(string path) =>
+        Uri.TryCreate(path, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
+
+    /// <summary>
     /// Builds the command that opens an entry with its default handler. On Unix the platform opener is invoked
     /// by name instead of letting UseShellExecute decide: .NET runs any file whose execute bit is set directly,
     /// which would start a program without the confirmation <see cref="IsExecutableOrScript"/> exists to prompt
-    /// for, and would exec every file on a FAT or NTFS-3g mount before falling back to the opener.
+    /// for, and would exec every file on a FAT or NTFS-3g mount before falling back to the opener. A web address
+    /// has no folder to start in: its "parent" is not a directory, and a start folder that does not exist makes
+    /// the launch fail.
     /// </summary>
-    private static ProcessStartInfo CreateOpenStartInfo(string path)
+    internal static ProcessStartInfo CreateOpenStartInfo(string path)
     {
-        var workingDirectory = Path.GetDirectoryName(path) ?? string.Empty;
+        var workingDirectory = IsWebAddress(path) ? string.Empty : Path.GetDirectoryName(path) ?? string.Empty;
 
         if (OperatingSystem.IsWindows())
         {

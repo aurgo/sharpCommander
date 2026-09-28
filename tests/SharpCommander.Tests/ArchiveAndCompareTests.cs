@@ -159,7 +159,13 @@ public class ArchiveAndCompareTests
         using var dir = new TempDir();
         var left = dir.Dir("left");
         var right = dir.Dir("right");
-        dir.File("left/.hidden", "x");
+        var hidden = dir.File("left/.hidden", "x");
+
+        // A leading dot hides a file on Unix; Windows goes by the attribute alone.
+        if (OperatingSystem.IsWindows())
+        {
+            File.SetAttributes(hidden, File.GetAttributes(hidden) | FileAttributes.Hidden);
+        }
 
         Assert.Empty((await Comparer.CompareAsync(left, right, includeHidden: false)).Items);
         Assert.Single((await Comparer.CompareAsync(left, right, includeHidden: true)).Items);

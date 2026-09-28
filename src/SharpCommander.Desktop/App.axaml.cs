@@ -51,6 +51,7 @@ public sealed class App : Application
             var directoryComparer = new DirectoryComparer();
             var undoService = new UndoService();
             var updateService = new GitHubUpdateService();
+            var spaceAnalyzer = new SpaceAnalyzerService();
 
             var mainViewModel = new MainWindowViewModel(
                 fileSystemService,
@@ -64,7 +65,8 @@ public sealed class App : Application
                 directoryComparer,
                 undoService,
                 connections,
-                updateService);
+                updateService,
+                spaceAnalyzer);
 
             RegisterDispatcherExceptionHandler(dialogService);
 

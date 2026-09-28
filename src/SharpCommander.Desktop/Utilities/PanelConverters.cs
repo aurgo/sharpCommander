@@ -7,40 +7,16 @@ using SharpCommander.Core.Models;
 namespace SharpCommander.Desktop.Utilities;
 
 /// <summary>
-/// Brushes and geometries shared by the file panel rows and the favorites star. Everything is created once:
-/// converters must not allocate per row (L2), so they return these cached immutable objects.
+/// The brushes of the favorites star. They are created once: converters must not allocate per row (L2), so they
+/// return these cached immutable objects.
 /// </summary>
 public static class PanelBrushes
 {
-    /// <summary>Folder icon color.</summary>
-    public static IImmutableSolidColorBrush Folder { get; } = new ImmutableSolidColorBrush(Color.FromRgb(255, 204, 0));
-
-    /// <summary>Drive icon color.</summary>
-    public static IImmutableSolidColorBrush Drive { get; } = new ImmutableSolidColorBrush(Color.FromRgb(0, 120, 212));
-
-    /// <summary>Parent directory icon color.</summary>
-    public static IImmutableSolidColorBrush Parent { get; } = new ImmutableSolidColorBrush(Color.FromRgb(102, 102, 102));
-
-    /// <summary>Generic file icon color.</summary>
-    public static IImmutableSolidColorBrush File { get; } = new ImmutableSolidColorBrush(Color.FromRgb(128, 128, 128));
-
     /// <summary>Star color of a folder that is a favorite.</summary>
     public static IImmutableSolidColorBrush FavoriteOn { get; } = new ImmutableSolidColorBrush(Color.FromRgb(255, 193, 7));
 
     /// <summary>Star color of a folder that is not a favorite.</summary>
-    public static IImmutableSolidColorBrush FavoriteOff { get; } = File;
-
-    /// <summary>Returns the cached icon brush for an entry type.</summary>
-    public static IImmutableSolidColorBrush ForEntryType(FileSystemEntryType entryType)
-    {
-        return entryType switch
-        {
-            FileSystemEntryType.Directory => Folder,
-            FileSystemEntryType.Drive => Drive,
-            FileSystemEntryType.ParentDirectory => Parent,
-            _ => File
-        };
-    }
+    public static IImmutableSolidColorBrush FavoriteOff { get; } = new ImmutableSolidColorBrush(Color.FromRgb(128, 128, 128));
 }
 
 /// <summary>
@@ -57,9 +33,6 @@ public static class PanelConverters
 
     /// <summary>Entry to the text of the modified column; empty for drives and unknown dates.</summary>
     public static IValueConverter EntryModified { get; } = new EntryModifiedConverter();
-
-    /// <summary>Entry type to its cached icon brush.</summary>
-    public static IValueConverter EntryBrush { get; } = new EntryBrushConverter();
 
     /// <summary>Hidden flag to the row opacity, so hidden entries are dimmed.</summary>
     public static IValueConverter HiddenOpacity { get; } = new HiddenOpacityConverter();
@@ -103,19 +76,6 @@ public static class PanelConverters
             }
 
             return entry.LastModified.ToString("g", culture);
-        }
-
-        public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
-        {
-            throw new NotSupportedException();
-        }
-    }
-
-    private sealed class EntryBrushConverter : IValueConverter
-    {
-        public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-        {
-            return value is FileSystemEntryType entryType ? PanelBrushes.ForEntryType(entryType) : PanelBrushes.File;
         }
 
         public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SharpCommander.Core.Interfaces;
@@ -33,7 +34,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IUndoService _undoService;
     private readonly ISftpConnections _connections;
     private readonly IUpdateService _updates;
+    private readonly ISpaceAnalyzerService _spaceAnalyzer;
     private readonly ISecretStore _secrets = new KeychainSecretStore();
+
+    /// <summary>Cancelled when the window goes away; stops the watch for new releases.</summary>
+    private readonly CancellationTokenSource _lifetime = new();
+    private bool _watchingForUpdates;
     private bool _disposed;
 
     [ObservableProperty]
@@ -63,7 +69,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _isComparing;
 
-    /// <summary>Whether to look for a new release on startup; mirrored into the settings.</summary>
+    /// <summary>Whether to look for new releases automatically; mirrored into the settings.</summary>
     [ObservableProperty]
     private bool _checkForUpdates = true;
 
@@ -82,7 +88,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         IClipboardService clipboardService,
         IFileOperationsService fileOperationsService,
         ITrashService trashService,
-        ThemeService themeService, IArchiveService archiveService, IDirectoryComparer directoryComparer, IUndoService undoService, ISftpConnections connections, IUpdateService updates)
+        ThemeService themeService, IArchiveService archiveService, IDirectoryComparer directoryComparer, IUndoService undoService, ISftpConnections connections, IUpdateService updates, ISpaceAnalyzerService spaceAnalyzer)
     {
         ArgumentNullException.ThrowIfNull(fileSystemService);
         ArgumentNullException.ThrowIfNull(settingsService);
@@ -104,6 +110,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _undoService = undoService;
         _connections = connections;
         _updates = updates;
+        _spaceAnalyzer = spaceAnalyzer;
         _undoService.Changed += (_, _) => OnPropertyChanged(nameof(UndoDescription));
 
         _operations.OperationCompleted += OnOperationCompleted;
@@ -201,10 +208,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
         CheckForUpdates = settings.CheckForUpdates;
 
-        // Fire and forget, once a week at most: a release check must never hold up the window.
-        if (settings.CheckForUpdates && DueForCheck(settings.LastUpdateCheck))
+        // Fire and forget, once a day at most: a release check must never hold up the window.
+        if (settings.CheckForUpdates && DueForCheck(settings.LastUpdateCheck, UpdateCheckInterval))
         {
-            _ = CheckForUpdatesAsync(announceWhenUpToDate: false);
+            _ = RunGuardedAsync(Localization.Strings.Get("Update_Title"), () => CheckForUpdatesAsync(announceWhenUpToDate: false));
+        }
+
+        if (!_watchingForUpdates)
+        {
+            _watchingForUpdates = true;
+            _ = WatchForUpdatesAsync(_lifetime.Token);
         }
 
         SetStatus("Ready.");
@@ -1006,11 +1019,33 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     // ---- updates ----------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// The newer release the last check found, or null. While it is set the menu bar shows a button that opens its
+    /// download page, so a release put off with "Later" is not forgotten once its dialog is gone.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AvailableVersion))]
+    private UpdateInfo? _availableUpdate;
+
+    /// <summary>The version of <see cref="AvailableUpdate"/> for display ("2.4.0"), or null when there is none.</summary>
+    public string? AvailableVersion => AvailableUpdate?.Version.ToString();
+
     /// <summary>Looks for a newer release now, and says so either way.</summary>
     [RelayCommand]
-    private Task CheckForUpdatesNowAsync() => CheckForUpdatesAsync(announceWhenUpToDate: true);
+    private Task CheckForUpdatesNowAsync() =>
+        RunGuardedAsync(Localization.Strings.Get("Update_Title"), () => CheckForUpdatesAsync(announceWhenUpToDate: true));
 
-    /// <summary>Turns the startup check on or off.</summary>
+    /// <summary>Opens the download page of the newer release in the browser.</summary>
+    [RelayCommand]
+    private Task OpenUpdatePageAsync() => RunGuardedAsync(Localization.Strings.Get("Update_Title"), async () =>
+    {
+        if (AvailableUpdate is { } update)
+        {
+            await _fileSystemService.OpenWithDefaultAsync(update.Url);
+        }
+    });
+
+    /// <summary>Turns the automatic check on or off.</summary>
     [RelayCommand]
     private void ToggleUpdateChecks()
     {
@@ -1021,12 +1056,15 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Asks the update service and reports. The automatic check stays quiet unless there is something to say;
-    /// the one from the menu answers either way, because the user asked a question and deserves an answer.
+    /// Asks the update service and reports. The automatic check stays quiet unless there is something new to say,
+    /// and asks about each release once: from then on the button in the menu bar is the reminder, rather than the
+    /// same question every morning. The check from the menu answers either way, because the user asked a question
+    /// and deserves an answer.
     /// </summary>
     private async Task CheckForUpdatesAsync(bool announceWhenUpToDate)
     {
-        _settingsService.Settings.LastUpdateCheck = DateTime.UtcNow;
+        var settings = _settingsService.Settings;
+        settings.LastUpdateCheck = DateTime.UtcNow;
         _settingsService.RequestSave();
 
         if (!System.Version.TryParse(Version, out var current))
@@ -1054,6 +1092,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
         if (!found.IsNewer)
         {
+            AvailableUpdate = null;
             SetStatus(Localization.Strings.Format("Update_Current", Version));
 
             if (announceWhenUpToDate)
@@ -1064,7 +1103,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
+        AvailableUpdate = found;
         SetStatus(Localization.Strings.Format("Update_Available", found.Tag));
+
+        if (!announceWhenUpToDate && string.Equals(settings.LastAnnouncedUpdate, found.Tag, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        settings.LastAnnouncedUpdate = found.Tag;
+        _settingsService.RequestSave();
 
         var open = await _dialogService.ShowConfirmAsync(
             title,
@@ -1078,11 +1126,166 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>How often the startup check runs. Releases are not frequent enough to warrant more.</summary>
-    private static readonly TimeSpan CheckInterval = TimeSpan.FromDays(7);
+    /// <summary>
+    /// Keeps looking while the window stays open, so a release published after startup is noticed without a
+    /// restart: every <see cref="UpdateWatchInterval"/> the watch checks whether a day has passed since the last
+    /// check, and runs one when it has.
+    /// </summary>
+    private async Task WatchForUpdatesAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(UpdateWatchInterval);
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                if (CheckForUpdates && DueForCheck(_settingsService.Settings.LastUpdateCheck, UpdateCheckInterval))
+                {
+                    await RunGuardedAsync(Localization.Strings.Get("Update_Title"), () => CheckForUpdatesAsync(announceWhenUpToDate: false));
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The window has closed.
+        }
+    }
 
-    /// <summary>True when the last automatic check is older than <see cref="CheckInterval"/>, or never happened.</summary>
-    internal static bool DueForCheck(DateTime? last) => last is not { } when || DateTime.UtcNow - when >= CheckInterval;
+    /// <summary>How often the automatic check runs: at startup and while the window is open, once a day at most.</summary>
+    private static readonly TimeSpan UpdateCheckInterval = TimeSpan.FromDays(1);
+
+    /// <summary>How often the open window looks at whether the next check is due. Tests shorten it.</summary>
+    internal TimeSpan UpdateWatchInterval { get; set; } = TimeSpan.FromHours(1);
+
+    /// <summary>True when <paramref name="last"/> is at least <paramref name="interval"/> ago, or never happened.</summary>
+    internal static bool DueForCheck(DateTime? last, TimeSpan interval) => last is not { } when || DateTime.UtcNow - when >= interval;
+
+    // ---- SpaceAnalyzer ----------------------------------------------------------------------------------
+
+    private const string SpaceAnalyzerTitle = "SpaceAnalyzer";
+
+    /// <summary>How often a newer SpaceAnalyzer is looked for when it is opened.</summary>
+    private static readonly TimeSpan SpaceAnalyzerCheckInterval = TimeSpan.FromDays(7);
+
+    /// <summary>
+    /// Opens SpaceAnalyzer on the active pane's folder. The first time, the build for this system is downloaded from
+    /// its GitHub release and kept; from then on the kept copy starts at once, even with no network, and at most
+    /// once a week a newer release is fetched in the background for the next time.
+    /// </summary>
+    [RelayCommand]
+    private Task OpenSpaceAnalyzerAsync() => RunGuardedAsync(SpaceAnalyzerTitle, async () =>
+    {
+        if (!_spaceAnalyzer.IsSupported)
+        {
+            await _dialogService.ShowMessageAsync(
+                SpaceAnalyzerTitle,
+                Localization.Strings.Format("SpaceAnalyzer_Unsupported", $"{RuntimeInformation.OSDescription}, {RuntimeInformation.OSArchitecture}"));
+            return;
+        }
+
+        var install = _spaceAnalyzer.Installed;
+        var kept = install is not null;
+
+        install ??= await DownloadSpaceAnalyzerAsync();
+        if (install is null)
+        {
+            return;
+        }
+
+        // Only a folder on this computer can be scanned; anything else opens on the start screen, which lists the drives.
+        var panel = ActivePanel;
+        var folder = panel is { IsRootView: false, CurrentPath.Length: > 0 } && !AnyPath.IsRemote(panel.CurrentPath)
+            ? panel.CurrentPath
+            : null;
+
+        await _spaceAnalyzer.LaunchAsync(install, folder);
+
+        SetStatus(folder is not null
+            ? Localization.Strings.Format("SpaceAnalyzer_Opened", folder)
+            : Localization.Strings.Get(panel is not null && AnyPath.IsRemote(panel.CurrentPath) ? "SpaceAnalyzer_OpenedRemote" : "SpaceAnalyzer_OpenedStart"));
+
+        // The copy that just started stays as it is; a newer one only takes over from the next time on.
+        if (kept && DueForCheck(_settingsService.Settings.LastSpaceAnalyzerCheck, SpaceAnalyzerCheckInterval))
+        {
+            _ = RefreshSpaceAnalyzerAsync(install.Version);
+        }
+    });
+
+    /// <summary>
+    /// Downloads SpaceAnalyzer for the first time, with the progress in the status bar. This is the one step that
+    /// needs the network, so when it fails the user is told why; the result is then null.
+    /// </summary>
+    private async Task<SpaceAnalyzerInstall?> DownloadSpaceAnalyzerAsync()
+    {
+        SetStatus(Localization.Strings.Get("SpaceAnalyzer_Looking"));
+
+        var release = await _spaceAnalyzer.FindLatestAsync();
+        _settingsService.Settings.LastSpaceAnalyzerCheck = DateTime.UtcNow;
+        _settingsService.RequestSave();
+
+        if (release is null)
+        {
+            SetStatus(Localization.Strings.Get("SpaceAnalyzer_Unreachable"));
+            await _dialogService.ShowMessageAsync(SpaceAnalyzerTitle, Localization.Strings.Get("SpaceAnalyzer_UnreachableLong"));
+            return null;
+        }
+
+        // Reports are posted to this thread and can still be queued when the download ends; after that they must
+        // not paint a percentage over the status that follows.
+        var finished = false;
+        var shown = -1;
+        var progress = new Progress<double>(fraction =>
+        {
+            var percent = (int)(fraction * 100);
+            if (!finished && percent != shown)
+            {
+                shown = percent;
+                SetStatus(Localization.Strings.Format("SpaceAnalyzer_Downloading", release.Version, percent));
+            }
+        });
+
+        SetStatus(Localization.Strings.Format("SpaceAnalyzer_Downloading", release.Version, 0));
+
+        try
+        {
+            return await _spaceAnalyzer.InstallAsync(release, progress);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            AppLog.Error("SpaceAnalyzer could not be downloaded.", ex);
+            SetStatus(Localization.Strings.Get("SpaceAnalyzer_Failed"));
+            await _dialogService.ShowErrorAsync(SpaceAnalyzerTitle, Localization.Strings.Format("SpaceAnalyzer_FailedLong", ex.Message), ex.ToString());
+            return null;
+        }
+        finally
+        {
+            finished = true;
+        }
+    }
+
+    /// <summary>
+    /// Fetches a newer SpaceAnalyzer, when there is one, for the next time it is opened. Nobody asked for this, so it
+    /// never opens a dialog: a new version is one line in the status bar, and a failure is only logged.
+    /// </summary>
+    private async Task RefreshSpaceAnalyzerAsync(Version current)
+    {
+        _settingsService.Settings.LastSpaceAnalyzerCheck = DateTime.UtcNow;
+        _settingsService.RequestSave();
+
+        try
+        {
+            if (await _spaceAnalyzer.FindLatestAsync() is not { } release || release.Version <= current)
+            {
+                return;
+            }
+
+            var install = await _spaceAnalyzer.InstallAsync(release);
+            SetStatus(Localization.Strings.Format("SpaceAnalyzer_Updated", install.Version));
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warning("A newer SpaceAnalyzer could not be downloaded.", ex);
+        }
+    }
 
     // ---- remote servers ---------------------------------------------------------------------------------
 
@@ -2026,6 +2229,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         _disposed = true;
+        _lifetime.Cancel();
+        _lifetime.Dispose();
         _operations.OperationCompleted -= OnOperationCompleted;
 
         LeftPanel.FavoritesChanged -= OnFavoritesChanged;

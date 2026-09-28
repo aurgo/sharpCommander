@@ -107,8 +107,10 @@ public static class PathUtils
             return home;
         }
 
+        // "~/.ssh/key" typed on Windows keeps its forward slashes otherwise, and a path shown back to the user as
+        // "C:\Users\ana\.ssh/key" reads as a mistake.
         return expanded.Length > 1 && expanded[0] == '~' && (expanded[1] == '/' || expanded[1] == '\\')
-            ? Path.Combine(home, expanded[2..])
+            ? Path.Combine(home, expanded[2..].Replace('/', Path.DirectorySeparatorChar))
             : expanded;
     }
 

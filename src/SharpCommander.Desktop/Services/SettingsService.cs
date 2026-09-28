@@ -265,7 +265,7 @@ public sealed class SettingsService : ISettingsService
     /// XDG_DOWNLOAD_DIR at "Descargas", "Téléchargements" or "Downloads" depending on the install language, and
     /// assuming the English name silently dropped the favorite.
     /// </summary>
-    private static string GetDownloadsDirectory()
+    internal static string GetDownloadsDirectory()
     {
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 

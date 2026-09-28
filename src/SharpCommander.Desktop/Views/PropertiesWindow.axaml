@@ -36,7 +36,7 @@
 
             <StackPanel Spacing="12">
                 <StackPanel Orientation="Horizontal" Spacing="12">
-                    <PathIcon Width="36" Height="36" Data="{Binding EntryType, Converter={x:Static util:EntryIconConverter.Instance}}" />
+                    <Image Width="40" Height="40" Source="{Binding Entry, Converter={x:Static util:EntryImageConverter.Instance}}" />
                     <StackPanel VerticalAlignment="Center">
                         <SelectableTextBlock Text="{Binding Name}" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap" />
                         <TextBlock Text="{Binding TypeText}" Classes="dialog-secondary" />

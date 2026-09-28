@@ -116,6 +116,26 @@ internal sealed class GitHubRelease
 
     [JsonPropertyName("draft")]
     public bool Draft { get; set; }
+
+    [JsonPropertyName("assets")]
+    public List<GitHubAsset> Assets { get; set; } = [];
+}
+
+/// <summary>A file attached to a GitHub release.</summary>
+internal sealed class GitHubAsset
+{
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    [JsonPropertyName("size")]
+    public long Size { get; set; }
+
+    /// <summary>"sha256:&lt;hex&gt;", computed by GitHub when the file was uploaded; missing on older uploads.</summary>
+    [JsonPropertyName("digest")]
+    public string? Digest { get; set; }
+
+    [JsonPropertyName("browser_download_url")]
+    public string? BrowserDownloadUrl { get; set; }
 }
 
 [JsonSerializable(typeof(GitHubRelease))]

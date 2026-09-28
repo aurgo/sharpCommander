@@ -785,4 +785,40 @@ public class FileSystemServiceTests
         Assert.True(_service.IsExecutableOrScript(dir.File("start.tool", "x")));
         Assert.True(_service.IsExecutableOrScript(dir.File("panel.cpl", "x")));
     }
+
+    // ---- web addresses ---------------------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("https://github.com/aurgo/sharpCommander/releases/tag/v2.3.0", true)]
+    [InlineData("http://example.com/", true)]
+    [InlineData("/Users/ana/notes.txt", false)]
+    [InlineData("C:\\Users\\ana\\notes.txt", false)]
+    [InlineData("file:///Users/ana/notes.txt", false)]
+    [InlineData("sftp://ana@example.com:22/home/ana", false)]
+    [InlineData("notes.txt", false)]
+    public void IsWebAddress_OnlyTakesHttpAndHttps(string path, bool expected)
+    {
+        Assert.Equal(expected, FileSystemService.IsWebAddress(path));
+    }
+
+    [Fact]
+    public void AWebAddressOpensWithNoFolderToStartIn()
+    {
+        const string url = "https://github.com/aurgo/sharpCommander/releases/tag/v2.3.0";
+
+        var startInfo = FileSystemService.CreateOpenStartInfo(url);
+
+        // Its "parent" is no folder; a start folder that does not exist would make the launch fail.
+        Assert.Equal(string.Empty, startInfo.WorkingDirectory);
+        Assert.True(startInfo.FileName == url || startInfo.ArgumentList.Contains(url));
+    }
+
+    [Fact]
+    public async Task OpenWithDefault_AMissingFileIsStillRefused()
+    {
+        using var dir = new TempDir();
+
+        await Assert.ThrowsAsync<FileNotFoundException>(() => _service.OpenWithDefaultAsync(Path.Combine(dir.Path, "missing.txt")));
+    }
 }
+
