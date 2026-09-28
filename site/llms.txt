@@ -1,0 +1,24 @@
+# SharpCommander
+
+> SharpCommander is a free, open-source dual-pane file manager for Windows, macOS and Linux, in the Total Commander tradition: two panels side by side, function keys F2 to F10, copy and move from the active panel to the other one, tabs per panel and SFTP panels. Built with .NET 10 and Avalonia UI, in English and Spanish.
+
+- License: MIT. Price: free. No ads, no telemetry, no account. It only contacts GitHub to check for new versions (can be turned off) and to download SpaceAnalyzer when asked.
+- Current version: {{version}}.
+- Systems: Windows 10/11 (x64, ARM64, x86), macOS (Apple Silicon and Intel), Linux x64 and ARM64 with a desktop. Every download is self-contained (.NET included).
+- Features: two panels with tabs that can be pinned and are restored; F3 viewer (text and hex); F5 copy and F6 move with byte-level progress, cancel and conflict handling (overwrite, skip, rename, apply to all); delete to the trash; undo (Ctrl+Z) of the last copy, move, rename or new folder; SFTP panels with passwords in the system keychain or ~/.ssh keys; zip, tar and tar.gz pack and extract; compare, sync and mirror folders; byte-by-byte file compare; advanced search with wildcards, regular expressions and content; mass rename with [N], [E], [C] masks and preview; MD5, SHA-1, SHA-256 and SHA-512 checksums; favorites; ribbon with grouped commands; color icons with special-folder glyphs; light and dark themes; built-in SpaceAnalyzer disk space treemap; daily check for new versions with a "New version" button in the menu bar.
+- Keyboard: F2 rename, F3 view, F4 edit, F5 copy, F6 move, F7 new folder, F8 delete, F9 swap panels, F10 exit, Ctrl+T/Ctrl+W tabs, Ctrl+F filter, Ctrl+Shift+F advanced search, Ctrl+M mass rename, Ctrl+Z undo, Ctrl+H hidden files, Ctrl+B favorites panel. On macOS, ⌘ works as well as Ctrl.
+
+## Downloads (version {{version}})
+
+- [Windows x64]({{download}}SharpCommander-v{{version}}-win-x64.zip), [Windows ARM64]({{download}}SharpCommander-v{{version}}-win-arm64.zip), [Windows x86]({{download}}SharpCommander-v{{version}}-win-x86.zip): unzip and open SharpCommander.Desktop.exe
+- [macOS Apple Silicon]({{download}}SharpCommander-v{{version}}-osx-arm64.zip), [macOS Intel]({{download}}SharpCommander-v{{version}}-osx-x64.zip): SharpCommander.app inside a .zip
+- [Linux x64]({{download}}SharpCommander-v{{version}}-linux-x64.zip), [Linux ARM64]({{download}}SharpCommander-v{{version}}-linux-arm64.zip): unzip and run SharpCommander.Desktop
+- [Release notes and all versions](https://github.com/aurgo/sharpCommander/releases)
+
+## Pages
+
+- [Website in English]({{site}}en/): features, keyboard shortcuts, downloads and FAQ
+- [Sitio web en español]({{site}})
+- [Source code and README](https://github.com/aurgo/sharpCommander)
+- [Report a problem](https://github.com/aurgo/sharpCommander/issues)
+- [SpaceAnalyzer](https://aurgo.github.io/SpaceAnalyzer/en/), the disk space analyzer by the same author that SharpCommander can open on any folder
