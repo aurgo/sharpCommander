@@ -2,6 +2,10 @@
 # A tag named v<version> additionally publishes the seven runtime identifiers with the csproj defaults
 # (self-contained, partially trimmed) through the repository's publish scripts and attaches the ZIP archives
 # to a GitHub release. The tag must match <Version> in Directory.Build.props.
+#
+# Run by hand from the Actions tab on master with "Publish a release" ticked, it does the same without a tag being
+# pushed first: the release is created for v<Version> of Directory.Build.props, and GitHub creates that tag on the
+# commit that was built. It refuses when that release already exists, so a version is never published twice.
 
 name: CI
 
@@ -12,6 +16,11 @@ on:
   pull_request:
     branches: [master]
   workflow_dispatch:
+    inputs:
+      release:
+        description: Publish a release for the version in Directory.Build.props (master only)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -48,10 +57,39 @@ jobs:
         # If a test ever hangs, fail within minutes and name the tests that were running.
         run: dotnet test SharpCommander.sln -c Release --no-build --blame-hang --blame-hang-timeout 5m
 
+  # The tag of the release: the pushed tag, or v<Version> when the release is started from the Actions tab.
+  version:
+    name: Release version
+    if: startsWith(github.ref, 'refs/tags/v') || (inputs.release && github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the version and the tag
+        id: tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(grep -o '<Version>[^<]*</Version>' Directory.Build.props | sed -E 's#</?Version>##g')
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+              echo "::error::Tag $GITHUB_REF_NAME does not match <Version>$version</Version> in Directory.Build.props"
+              exit 1
+            fi
+          elif gh release view "v$version" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::error::Release v$version already exists. Set a new <Version> in Directory.Build.props first."
+            exit 1
+          fi
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
   publish:
     name: Publish (${{ matrix.rid }})
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build-test
+    if: startsWith(github.ref, 'refs/tags/v') || (inputs.release && github.ref == 'refs/heads/master')
+    needs: [build-test, version]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -72,16 +110,6 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Check that the tag matches Directory.Build.props
-        shell: bash
-        run: |
-          version=$(grep -o '<Version>[^<]*</Version>' Directory.Build.props | sed -E 's#</?Version>##g')
-          tag="${GITHUB_REF_NAME#v}"
-          if [ "$version" != "$tag" ]; then
-            echo "::error::Tag v$tag does not match <Version>$version</Version> in Directory.Build.props"
-            exit 1
-          fi
-
       - name: Publish (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -100,8 +128,8 @@ jobs:
 
   release:
     name: GitHub release
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: publish
+    if: startsWith(github.ref, 'refs/tags/v') || (inputs.release && github.ref == 'refs/heads/master')
+    needs: [publish, version]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -118,11 +146,14 @@ jobs:
         id: notes
         shell: bash
         run: |
-          file=".github/release-notes/${GITHUB_REF_NAME}.md"
+          file=".github/release-notes/${{ needs.version.outputs.tag }}.md"
           if [ -f "$file" ]; then echo "path=$file" >> "$GITHUB_OUTPUT"; fi
 
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: SharpCommander ${{ needs.version.outputs.tag }}
           files: dist/*.zip
           fail_on_unmatched_files: true
           body_path: ${{ steps.notes.outputs.path }}

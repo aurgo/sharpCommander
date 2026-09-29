@@ -35,7 +35,7 @@ The trimming and AOT analyzers are enabled, so keep the build free of `IL` warni
 ## Releasing
 
 1. Set the new version in `Directory.Build.props` (the only place it is defined) and describe the release in `RELEASE_NOTES.md` (Spanish) and in `.github/release-notes/v<version>.md`, which becomes the text of the GitHub release: English first, with the Spanish notes in a collapsed `<details>` section. Editing that file on `master` later rewrites the published release text (the *Release notes* workflow).
-2. Merge to `master` and push a tag `v<version>`, for example `v2.1.0`. The tag must match `Directory.Build.props`; the workflow refuses otherwise.
+2. Merge to `master` and push a tag `v<version>`, for example `v2.1.0`. The tag must match `Directory.Build.props`; the workflow refuses otherwise. Without a terminal, run the *CI* workflow on `master` from the Actions tab with *Publish a release* ticked instead: it creates the tag `v<version>` on that commit, and refuses if that release already exists.
 3. The CI workflow builds and tests on the three platforms, publishes the seven runtime identifiers with the publish scripts (`SharpCommander.app` for macOS) and attaches the ZIP archives to the GitHub release.
 
 The scripts can be run locally too: `./publish.sh`, `.\publish.ps1` or `publish.bat`; see the Publishing section of the README.
