@@ -1163,13 +1163,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private const string SpaceAnalyzerTitle = "SpaceAnalyzer";
 
-    /// <summary>How often a newer SpaceAnalyzer is looked for when it is opened.</summary>
-    private static readonly TimeSpan SpaceAnalyzerCheckInterval = TimeSpan.FromDays(7);
+    /// <summary>
+    /// How long opening a kept copy waits for GitHub to say whether there is a newer release. Past that (no network,
+    /// a slow line) the kept copy opens as it is.
+    /// </summary>
+    private static readonly TimeSpan SpaceAnalyzerLookupTimeout = TimeSpan.FromSeconds(5);
 
     /// <summary>
     /// Opens SpaceAnalyzer on the active pane's folder. The first time, the build for this system is downloaded from
-    /// its GitHub release and kept; from then on the kept copy starts at once, even with no network, and at most
-    /// once a week a newer release is fetched in the background for the next time.
+    /// its GitHub release and kept. Every later time GitHub is asked briefly for a newer release: when there is one it
+    /// is downloaded and opened right away, and when GitHub does not answer the kept copy opens, even offline.
     /// </summary>
     [RelayCommand]
     private Task OpenSpaceAnalyzerAsync() => RunGuardedAsync(SpaceAnalyzerTitle, async () =>
@@ -1182,10 +1185,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var install = _spaceAnalyzer.Installed;
-        var kept = install is not null;
+        var install = _spaceAnalyzer.Installed is { } kept
+            ? await UpdateSpaceAnalyzerAsync(kept)
+            : await DownloadSpaceAnalyzerAsync();
 
-        install ??= await DownloadSpaceAnalyzerAsync();
         if (install is null)
         {
             return;
@@ -1202,11 +1205,25 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         SetStatus(folder is not null
             ? Localization.Strings.Format("SpaceAnalyzer_Opened", folder)
             : Localization.Strings.Get(panel is not null && AnyPath.IsRemote(panel.CurrentPath) ? "SpaceAnalyzer_OpenedRemote" : "SpaceAnalyzer_OpenedStart"));
+    });
 
-        // The copy that just started stays as it is; a newer one only takes over from the next time on.
-        if (kept && DueForCheck(_settingsService.Settings.LastSpaceAnalyzerCheck, SpaceAnalyzerCheckInterval))
+    /// <summary>
+    /// Shows the folder where the downloaded copies of SpaceAnalyzer are kept in the active pane, so they can be
+    /// looked at, replaced or removed by hand.
+    /// </summary>
+    [RelayCommand]
+    private Task ShowSpaceAnalyzerFolderAsync() => RunGuardedAsync(SpaceAnalyzerTitle, async () =>
+    {
+        var folder = _spaceAnalyzer.Folder;
+        if (!Directory.Exists(folder))
         {
-            _ = RefreshSpaceAnalyzerAsync(install.Version);
+            await _dialogService.ShowMessageAsync(SpaceAnalyzerTitle, Localization.Strings.Format("SpaceAnalyzer_NoFolderYet", folder));
+            return;
+        }
+
+        if (ActivePanel is { } panel)
+        {
+            await panel.NavigateToAsync(folder);
         }
     });
 
@@ -1229,6 +1246,64 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             return null;
         }
 
+        try
+        {
+            return await InstallSpaceAnalyzerAsync(release);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            AppLog.Error("SpaceAnalyzer could not be downloaded.", ex);
+            SetStatus(Localization.Strings.Get("SpaceAnalyzer_Failed"));
+            await _dialogService.ShowErrorAsync(SpaceAnalyzerTitle, Localization.Strings.Format("SpaceAnalyzer_FailedLong", ex.Message), ex.ToString());
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Returns the copy to open: a newer release when GitHub has one and it downloads, otherwise the kept copy. The
+    /// kept copy still works, so nothing here opens a dialog; a failed update is one line in the status bar.
+    /// </summary>
+    private async Task<SpaceAnalyzerInstall> UpdateSpaceAnalyzerAsync(SpaceAnalyzerInstall kept)
+    {
+        SpaceAnalyzerRelease? release;
+        using (var lookup = new CancellationTokenSource(SpaceAnalyzerLookupTimeout))
+        {
+            try
+            {
+                release = await _spaceAnalyzer.FindLatestAsync(lookup.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                AppLog.Info("GitHub did not say in time whether there is a newer SpaceAnalyzer; the kept copy opens.");
+                return kept;
+            }
+        }
+
+        _settingsService.Settings.LastSpaceAnalyzerCheck = DateTime.UtcNow;
+        _settingsService.RequestSave();
+
+        if (release is null || release.Version <= kept.Version)
+        {
+            return kept;
+        }
+
+        try
+        {
+            var install = await InstallSpaceAnalyzerAsync(release);
+            AppLog.Info($"SpaceAnalyzer updated from {kept.Version} to {install.Version}.");
+            return install;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            AppLog.Warning($"SpaceAnalyzer {release.Version} could not be downloaded; {kept.Version} opens instead.", ex);
+            SetStatus(Localization.Strings.Format("SpaceAnalyzer_UpdateFailed", release.Version, kept.Version));
+            return kept;
+        }
+    }
+
+    /// <summary>Downloads and keeps <paramref name="release"/>, with the progress in the status bar.</summary>
+    private async Task<SpaceAnalyzerInstall> InstallSpaceAnalyzerAsync(SpaceAnalyzerRelease release)
+    {
         // Reports are posted to this thread and can still be queued when the download ends; after that they must
         // not paint a percentage over the status that follows.
         var finished = false;
@@ -1249,41 +1324,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             return await _spaceAnalyzer.InstallAsync(release, progress);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            AppLog.Error("SpaceAnalyzer could not be downloaded.", ex);
-            SetStatus(Localization.Strings.Get("SpaceAnalyzer_Failed"));
-            await _dialogService.ShowErrorAsync(SpaceAnalyzerTitle, Localization.Strings.Format("SpaceAnalyzer_FailedLong", ex.Message), ex.ToString());
-            return null;
-        }
         finally
         {
             finished = true;
-        }
-    }
-
-    /// <summary>
-    /// Fetches a newer SpaceAnalyzer, when there is one, for the next time it is opened. Nobody asked for this, so it
-    /// never opens a dialog: a new version is one line in the status bar, and a failure is only logged.
-    /// </summary>
-    private async Task RefreshSpaceAnalyzerAsync(Version current)
-    {
-        _settingsService.Settings.LastSpaceAnalyzerCheck = DateTime.UtcNow;
-        _settingsService.RequestSave();
-
-        try
-        {
-            if (await _spaceAnalyzer.FindLatestAsync() is not { } release || release.Version <= current)
-            {
-                return;
-            }
-
-            var install = await _spaceAnalyzer.InstallAsync(release);
-            SetStatus(Localization.Strings.Format("SpaceAnalyzer_Updated", install.Version));
-        }
-        catch (Exception ex)
-        {
-            AppLog.Warning("A newer SpaceAnalyzer could not be downloaded.", ex);
         }
     }
 

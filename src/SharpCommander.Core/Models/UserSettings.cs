@@ -59,7 +59,7 @@ public sealed class UserSettings
     /// <summary>The release (its tag) the automatic check last asked about, so each release is only asked about once.</summary>
     public string? LastAnnouncedUpdate { get; set; }
 
-    /// <summary>When a newer SpaceAnalyzer was last looked for, so opening it asks GitHub at most once a week.</summary>
+    /// <summary>When GitHub was last asked for a newer SpaceAnalyzer.</summary>
     public DateTime? LastSpaceAnalyzerCheck { get; set; }
 
     /// <summary>

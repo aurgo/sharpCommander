@@ -70,6 +70,8 @@ public sealed class SpaceAnalyzerService : ISpaceAnalyzerService, IDisposable
 
     public bool IsSupported => _package is not null;
 
+    public string Folder => _root;
+
     public SpaceAnalyzerInstall? Installed => _package is { } package ? FindInstalled(package) : null;
 
     public async Task<SpaceAnalyzerRelease?> FindLatestAsync(CancellationToken cancellationToken = default)

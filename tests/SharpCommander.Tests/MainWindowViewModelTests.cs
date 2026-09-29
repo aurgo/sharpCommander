@@ -1659,79 +1659,100 @@ public class MainWindowViewModelTests
     }
 
     [AvaloniaFact]
-    public async Task SpaceAnalyzer_AKeptCopyOpensWithoutAskingGitHub()
+    public async Task SpaceAnalyzer_AKeptCopyThatIsTheLatestOpensWithoutDownloading()
     {
         using var harness = new Harness();
         using var dir = new TempDir();
         var vm = harness.ViewModel;
         await GoAsync(vm, dir.Dir("left"), dir.Dir("right"));
         vm.SetActivePanel(vm.LeftPanel);
-        var kept = FakeSpaceAnalyzerService.Install("1.0.0");
+        var kept = FakeSpaceAnalyzerService.Install("1.1.0");
         harness.SpaceAnalyzer.Installed = kept;
-        harness.Settings.Settings.LastSpaceAnalyzerCheck = DateTime.UtcNow.AddDays(-1);
+        harness.SpaceAnalyzer.Latest = FakeSpaceAnalyzerService.Release("1.1.0");
 
         await vm.OpenSpaceAnalyzerCommand.ExecuteAsync(null);
-        await WaitUntilAsync(() => false, 100);
 
-        Assert.Equal(0, harness.SpaceAnalyzer.Lookups);
+        Assert.Equal(1, harness.SpaceAnalyzer.Lookups);
         Assert.Empty(harness.SpaceAnalyzer.Installs);
         var launch = Assert.Single(harness.SpaceAnalyzer.Launches);
         Assert.Same(kept, launch.Install);
         Assert.Equal(vm.LeftPanel.CurrentPath, launch.Folder);
+        Assert.Empty(harness.Dialogs.Calls);
     }
 
     [AvaloniaFact]
-    public async Task SpaceAnalyzer_OnceAWeekANewerReleaseIsFetchedForTheNextTime()
+    public async Task SpaceAnalyzer_ANewerReleaseIsDownloadedAndOpensRightAway()
     {
         using var harness = new Harness();
         var vm = harness.ViewModel;
+        harness.SpaceAnalyzer.Installed = FakeSpaceAnalyzerService.Install("1.0.0");
+        harness.SpaceAnalyzer.Latest = FakeSpaceAnalyzerService.Release("1.1.0");
+
+        // A check made yesterday does not hold back a release published since.
+        harness.Settings.Settings.LastSpaceAnalyzerCheck = DateTime.UtcNow.AddHours(-1);
+
+        await vm.OpenSpaceAnalyzerCommand.ExecuteAsync(null);
+
+        Assert.Equal(new Version(1, 1, 0), Assert.Single(harness.SpaceAnalyzer.Installs).Version);
+        Assert.Equal(new Version(1, 1, 0), Assert.Single(harness.SpaceAnalyzer.Launches).Install.Version);
+        Assert.True(DateTime.UtcNow - harness.Settings.Settings.LastSpaceAnalyzerCheck < TimeSpan.FromMinutes(1));
+        Assert.Empty(harness.Dialogs.Calls);
+    }
+
+    [AvaloniaFact]
+    public async Task SpaceAnalyzer_WhenTheUpdateFailsTheKeptCopyOpens()
+    {
+        using var harness = new Harness();
         var kept = FakeSpaceAnalyzerService.Install("1.0.0");
         harness.SpaceAnalyzer.Installed = kept;
         harness.SpaceAnalyzer.Latest = FakeSpaceAnalyzerService.Release("1.1.0");
-        harness.Settings.Settings.LastSpaceAnalyzerCheck = DateTime.UtcNow.AddDays(-8);
+        harness.SpaceAnalyzer.InstallFailure = new HttpRequestException("no network");
 
-        await vm.OpenSpaceAnalyzerCommand.ExecuteAsync(null);
-        await WaitUntilAsync(() => harness.SpaceAnalyzer.Installs.Count > 0, 2000);
+        await harness.ViewModel.OpenSpaceAnalyzerCommand.ExecuteAsync(null);
 
-        // The copy already kept is the one that opened; the new one only takes over from the next time on.
         Assert.Same(kept, Assert.Single(harness.SpaceAnalyzer.Launches).Install);
-        Assert.Equal(new Version(1, 1, 0), Assert.Single(harness.SpaceAnalyzer.Installs).Version);
-        Assert.True(DateTime.UtcNow - harness.Settings.Settings.LastSpaceAnalyzerCheck < TimeSpan.FromMinutes(1));
-        Assert.Contains("1.1.0", vm.StatusMessage, StringComparison.Ordinal);
-
-        // Nobody asked for the check, so it never interrupts with a dialog.
         Assert.Empty(harness.Dialogs.Calls);
     }
 
     [AvaloniaFact]
-    public async Task SpaceAnalyzer_TheWeeklyCheckKeepsTheCopyWhenNothingIsNewer()
+    public async Task SpaceAnalyzer_WithoutNetworkTheKeptCopyOpens()
     {
         using var harness = new Harness();
-        harness.SpaceAnalyzer.Installed = FakeSpaceAnalyzerService.Install("1.1.0");
-        harness.SpaceAnalyzer.Latest = FakeSpaceAnalyzerService.Release("1.1.0");
-        harness.Settings.Settings.LastSpaceAnalyzerCheck = DateTime.UtcNow.AddDays(-8);
+        var kept = FakeSpaceAnalyzerService.Install("1.0.0");
+        harness.SpaceAnalyzer.Installed = kept;
+        harness.SpaceAnalyzer.Latest = null;
 
         await harness.ViewModel.OpenSpaceAnalyzerCommand.ExecuteAsync(null);
-        await WaitUntilAsync(() => harness.SpaceAnalyzer.Lookups > 0, 2000);
 
         Assert.Empty(harness.SpaceAnalyzer.Installs);
-        Assert.Single(harness.SpaceAnalyzer.Launches);
+        Assert.Same(kept, Assert.Single(harness.SpaceAnalyzer.Launches).Install);
+        Assert.Empty(harness.Dialogs.Calls);
     }
 
     [AvaloniaFact]
-    public async Task SpaceAnalyzer_AFailedWeeklyCheckStaysQuiet()
+    public async Task SpaceAnalyzer_ItsFolderOpensInTheActivePane()
     {
         using var harness = new Harness();
-        harness.SpaceAnalyzer.Installed = FakeSpaceAnalyzerService.Install("1.0.0");
-        harness.SpaceAnalyzer.Latest = FakeSpaceAnalyzerService.Release("1.1.0");
-        harness.SpaceAnalyzer.InstallFailure = new HttpRequestException("no network");
-        harness.Settings.Settings.LastSpaceAnalyzerCheck = null;
+        using var dir = new TempDir();
+        var vm = harness.ViewModel;
+        await GoAsync(vm, dir.Dir("left"), dir.Dir("right"));
+        vm.SetActivePanel(vm.RightPanel);
+        harness.SpaceAnalyzer.Folder = dir.Dir("tools");
 
-        await harness.ViewModel.OpenSpaceAnalyzerCommand.ExecuteAsync(null);
-        await WaitUntilAsync(() => harness.SpaceAnalyzer.Installs.Count > 0, 2000);
+        await vm.ShowSpaceAnalyzerFolderCommand.ExecuteAsync(null);
 
-        Assert.Single(harness.SpaceAnalyzer.Launches);
+        Assert.Equal(harness.SpaceAnalyzer.Folder, vm.RightPanel.CurrentPath);
         Assert.Empty(harness.Dialogs.Calls);
+    }
+
+    [AvaloniaFact]
+    public async Task SpaceAnalyzer_BeforeTheFirstDownloadItsFolderIsNamed()
+    {
+        using var harness = new Harness();
+
+        await harness.ViewModel.ShowSpaceAnalyzerFolderCommand.ExecuteAsync(null);
+
+        Assert.Contains(harness.SpaceAnalyzer.Folder, Assert.Single(harness.Dialogs.Messages), StringComparison.Ordinal);
     }
 
     [AvaloniaFact]

@@ -5,12 +5,18 @@ namespace SharpCommander.Core.Interfaces;
 /// <summary>
 /// SpaceAnalyzer, the disk space visualizer published at github.com/aurgo/SpaceAnalyzer, run as a companion
 /// program. It is not shipped with SharpCommander: the first use downloads the build for this system from the
-/// latest release, and that copy is kept, so every later use starts at once and needs no network.
+/// latest release, and that copy is kept; later uses replace it when a newer release is out, and start it without
+/// a network when there is none.
 /// </summary>
 public interface ISpaceAnalyzerService
 {
     /// <summary>True when a build is published for this operating system and processor.</summary>
     bool IsSupported { get; }
+
+    /// <summary>
+    /// The folder that keeps the downloaded copies, one folder per version; it may not exist until the first download.
+    /// </summary>
+    string Folder { get; }
 
     /// <summary>The newest copy kept so far, or null when nothing has been downloaded yet.</summary>
     SpaceAnalyzerInstall? Installed { get; }

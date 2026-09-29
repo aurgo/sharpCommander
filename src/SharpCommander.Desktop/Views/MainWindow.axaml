@@ -219,6 +219,7 @@
                             <PathIcon Data="{x:Static util:EntryIcons.Treemap}" />
                         </MenuItem.Icon>
                     </MenuItem>
+                    <MenuItem Header="{loc:T MainWindow_SpaceAnalyzerFolder}" Command="{Binding ShowSpaceAnalyzerFolderCommand}" />
                 </MenuItem>
                 <MenuItem Header="{loc:T MainWindow_Help}">
                     <MenuItem Header="{loc:T MainWindow_CheckUpdates}" Command="{Binding CheckForUpdatesNowCommand}" />

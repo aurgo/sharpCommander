@@ -8,6 +8,8 @@ public sealed class FakeSpaceAnalyzerService : ISpaceAnalyzerService
 {
     public bool IsSupported { get; set; } = true;
 
+    public string Folder { get; set; } = Path.Combine(Path.GetTempPath(), "SharpCommander-no-such-folder", "SpaceAnalyzer");
+
     public SpaceAnalyzerInstall? Installed { get; set; }
 
     /// <summary>What FindLatestAsync returns; null stands for "GitHub could not be reached".</summary>
