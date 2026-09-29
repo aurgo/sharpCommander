@@ -2,6 +2,43 @@
 
 ---
 
+# SharpCommander v2.3.1
+
+## 🚀 Resumen
+
+La 2.3.1 corrige cómo se actualiza **SpaceAnalyzer**: ahora usa siempre la última versión publicada, y un menú nuevo muestra dónde se guarda.
+
+---
+
+## 📊 SpaceAnalyzer
+
+- **Se actualiza al abrirlo.** Cada vez que lo abres, SharpCommander pregunta a GitHub si hay una versión nueva; si la hay, la descarga (con el porcentaje en la barra de estado) y abre ya la nueva. Antes solo miraba una vez por semana y la versión nueva no se usaba hasta la vez siguiente, así que quien tenía la 1.0.0 no recibía la 1.1.0.
+- **Sin conexión sigue abriéndose al momento.** Si GitHub no contesta en 5 segundos, o la descarga falla, se abre la copia que ya tienes; un fallo se indica en la barra de estado, sin ventanas.
+- **Nuevo:** *Herramientas → Mostrar la carpeta de SpaceAnalyzer* abre en el panel activo la carpeta donde se guardan las copias descargadas, para revisarlas o borrarlas a mano. Si todavía no se ha descargado, dice dónde se guardará.
+
+## 🛠️ Mantenimiento
+
+- Las notas de las versiones en GitHub se publican en inglés, con las notas en español en una sección desplegable.
+- **544 pruebas automatizadas.**
+
+---
+
+## 📥 Descargas
+
+| Plataforma | Archivo |
+|---|---|
+| Windows x64 | `SharpCommander-v2.3.1-win-x64.zip` |
+| Windows x86 | `SharpCommander-v2.3.1-win-x86.zip` |
+| Windows ARM64 | `SharpCommander-v2.3.1-win-arm64.zip` |
+| Linux x64 | `SharpCommander-v2.3.1-linux-x64.zip` |
+| Linux ARM64 | `SharpCommander-v2.3.1-linux-arm64.zip` |
+| macOS Intel | `SharpCommander-v2.3.1-osx-x64.zip` |
+| macOS Apple Silicon | `SharpCommander-v2.3.1-osx-arm64.zip` |
+
+Autocontenidos: no requieren .NET instalado. En macOS, ejecuta `./install.sh` desde la carpeta extraída (la aplicación no está notarizada); en Windows, SmartScreen puede pedir *Más información → Ejecutar de todas formas*.
+
+---
+
 # SharpCommander v2.3.0
 
 ## 🚀 Resumen
